@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.Python
+venv/
+.venv/
+env/
+*.pyc
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Alembic
+backend/alembic/versions/__pycache__/
+
+# Uploads (user media)
+backend/uploads/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/build/
+
+# Misc
+.DS_Store
+*.log
+*.sqlite3
+*.db
+.idea/
+.vscode/
+*.swp
+*.swo
