@@ -213,6 +213,38 @@ export default function Dashboard() {
         <StatCard label="Routed to Google" value={routedCount} icon="✅" />
       </div>
 
+      {/* Review Funnel widget */}
+      {reviews.length > 0 && (() => {
+        const total = reviews.length
+        const routed = routedCount
+        const captured = total - routed
+        const responded = reviews.filter(r => r.status === 'responded').length
+        const steps = [
+          { label: 'Reviews received', value: total, pct: 100, color: 'bg-brand-500' },
+          { label: 'Routed to Google (4–5 ★)', value: routed, pct: Math.round((routed / total) * 100), color: 'bg-green-500' },
+          { label: 'Captured internally (<4 ★)', value: captured, pct: Math.round((captured / total) * 100), color: 'bg-yellow-500' },
+          { label: 'Responded', value: responded, pct: Math.round((responded / total) * 100), color: 'bg-purple-500' },
+        ]
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-gray-700">Review Funnel</h2>
+            <div className="space-y-2.5">
+              {steps.map(s => (
+                <div key={s.label}>
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                    <span>{s.label}</span>
+                    <span className="font-medium text-gray-700">{s.value} <span className="text-gray-400">({s.pct}%)</span></span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full ${s.color} rounded-full transition-all`} style={{ width: `${s.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Chart tabs */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">

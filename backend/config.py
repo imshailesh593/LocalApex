@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from_email: str = ""
     smtp_from_name: str = "LocalApex"
+    frontend_url: str = "http://localhost:5173"
 
     @property
     def origins_list(self) -> list[str]:

@@ -1,14 +1,30 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from pydantic import BaseModel, EmailStr
 from database import get_db
 from models.user import User
 from models.tenant import Tenant
+from models.password_reset import PasswordResetToken
 from schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse, PasswordChange, UserInvite
 from services.auth import hash_password, verify_password, create_access_token, get_current_user
+from services.email import send_email
+from config import get_settings
+from datetime import datetime, timedelta
 import uuid
 
+settings = get_settings()
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
@@ -46,6 +62,62 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
 
     token = create_access_token({"sub": user.id, "tenant_id": user.tenant_id, "role": user.role})
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
+
+
+@router.post("/forgot-password", status_code=200)
+async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == payload.email, User.is_deleted == False))
+    user = result.scalar_one_or_none()
+    # Always return 200 to prevent email enumeration
+    if not user:
+        return {"message": "If that email is registered, you'll receive a reset link shortly."}
+
+    reset_token = PasswordResetToken(
+        email=payload.email,
+        expires_at=datetime.utcnow() + timedelta(hours=1),
+    )
+    db.add(reset_token)
+    await db.flush()
+    await db.refresh(reset_token)
+
+    frontend_url = getattr(settings, 'frontend_url', 'http://localhost:5173')
+    reset_link = f"{frontend_url}/reset-password?token={reset_token.token}"
+
+    html = f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+      <h2 style="color:#1e3a5f">Reset your LocalApex password</h2>
+      <p>Click the button below to reset your password. This link expires in 1 hour.</p>
+      <a href="{reset_link}"
+         style="display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0">
+        Reset Password
+      </a>
+      <p style="color:#666;font-size:13px">If you didn't request this, you can safely ignore this email.</p>
+    </div>
+    """
+    await send_email(payload.email, "Reset your LocalApex password", html)
+    return {"message": "If that email is registered, you'll receive a reset link shortly."}
+
+
+@router.post("/reset-password", status_code=200)
+async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token == payload.token,
+            PasswordResetToken.used == False,
+        )
+    )
+    reset = result.scalar_one_or_none()
+    if not reset or reset.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    user_result = await db.execute(select(User).where(User.email == reset.email, User.is_deleted == False))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password_hash = hash_password(payload.new_password)
+    reset.used = True
+    return {"message": "Password updated successfully"}
 
 
 @router.post("/change-password", status_code=204)
