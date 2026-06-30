@@ -267,10 +267,15 @@ export default function ProfileSettings() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
-            <span className={`inline-block text-xs font-semibold px-2 py-1 rounded-full capitalize
-              ${tenant?.plan_type === 'pro' ? 'bg-purple-100 text-purple-700' : tenant?.plan_type === 'enterprise' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-              {tenant?.plan_type ?? '—'}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className={`inline-block text-xs font-semibold px-2 py-1 rounded-full capitalize
+                ${tenant?.plan_type === 'pro' ? 'bg-purple-100 text-purple-700' : tenant?.plan_type === 'starter' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                {tenant?.plan_type ?? '—'}
+              </span>
+              <a href="/plan" className="text-xs text-brand-600 hover:underline font-medium">
+                {tenant?.plan_type === 'free' ? 'Upgrade →' : 'Manage billing →'}
+              </a>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>

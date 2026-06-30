@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from database import get_db
 from models.review import ReviewFunnel
 from models.location import Location
+from models.review_reply import ReviewReply
 from schemas.review import ReviewCreate, ReviewUpdate, ReviewResponse, PublicReviewCreate, PublicReviewResponse
 from services.auth import get_current_user
 from services.review_funnel import process_review
@@ -477,3 +478,84 @@ async def import_reviews_csv(
         imported += 1
 
     return {"imported": imported, "errors": errors}
+
+
+# ── Review Reply (email to reviewer) ────────────────────────────────────────
+
+class ReplyPayload(BaseModel):
+    body: str
+
+
+@router.get("/{review_id}/reply")
+async def get_reply(review_id: str, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ReviewFunnel).where(ReviewFunnel.id == review_id, ReviewFunnel.tenant_id == current_user["tenant_id"])
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Review not found")
+    rr = await db.execute(select(ReviewReply).where(ReviewReply.review_id == review_id))
+    reply = rr.scalar_one_or_none()
+    if not reply:
+        return None
+    return {"id": reply.id, "body": reply.body, "sent_at": reply.sent_at, "created_at": reply.created_at}
+
+
+@router.post("/{review_id}/reply")
+async def send_reply(review_id: str, body: ReplyPayload, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    import uuid
+    from datetime import datetime, timezone
+    from models.tenant import Tenant
+
+    result = await db.execute(
+        select(ReviewFunnel).where(ReviewFunnel.id == review_id, ReviewFunnel.tenant_id == current_user["tenant_id"])
+    )
+    review = result.scalar_one_or_none()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    tenant_r = await db.execute(select(Tenant).where(Tenant.id == current_user["tenant_id"]))
+    tenant = tenant_r.scalar_one_or_none()
+    business_name = tenant.business_name if tenant else "Your Business"
+    brand_color = tenant.brand_color if tenant else "#1d4ed8"
+
+    sent = False
+    if review.reviewer_email:
+        html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:{brand_color};padding:24px;border-radius:8px 8px 0 0">
+            <h2 style="color:#fff;margin:0;font-size:18px">{business_name}</h2>
+          </div>
+          <div style="padding:24px;background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+            <p style="color:#374151;margin-top:0">Hi {review.reviewer_name or 'there'},</p>
+            <p style="color:#374151;white-space:pre-wrap">{body.body}</p>
+            <p style="color:#6b7280;font-size:13px;margin-bottom:0">— {business_name} team</p>
+          </div>
+        </div>
+        """
+        await send_email(
+            to=review.reviewer_email,
+            subject=f"Response to your review from {business_name}",
+            html=html,
+        )
+        sent = True
+
+    rr_result = await db.execute(select(ReviewReply).where(ReviewReply.review_id == review_id))
+    existing = rr_result.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+    if existing:
+        existing.body = body.body
+        existing.sent_at = now if sent else existing.sent_at
+    else:
+        reply = ReviewReply(
+            id=str(uuid.uuid4()),
+            tenant_id=current_user["tenant_id"],
+            review_id=review_id,
+            body=body.body,
+            sent_at=now if sent else None,
+        )
+        db.add(reply)
+
+    if review.status != 'responded':
+        review.status = 'responded'
+    await db.commit()
+    return {"sent": sent, "email": review.reviewer_email}

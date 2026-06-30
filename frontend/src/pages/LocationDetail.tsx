@@ -283,6 +283,30 @@ export default function LocationDetail() {
                   Copy snippet
                 </button>
               </div>
+
+              {/* Public profile link */}
+              <div className="w-full max-w-md border border-gray-200 rounded-xl p-4 bg-gray-50 text-left">
+                <p className="text-xs font-semibold text-gray-500 mb-2">Public business profile</p>
+                <code className="text-xs text-gray-700 break-all block mb-3">
+                  {`${window.location.origin}/biz/${location.funnel_slug}`}
+                </code>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(`${window.location.origin}/biz/${location.funnel_slug}`)}
+                    className="text-xs text-brand-600 hover:underline font-medium"
+                  >
+                    Copy link
+                  </button>
+                  <a
+                    href={`/biz/${location.funnel_slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-gray-500 hover:underline"
+                  >
+                    Preview →
+                  </a>
+                </div>
+              </div>
             </>
           ) : (
             <div className="text-center space-y-2">

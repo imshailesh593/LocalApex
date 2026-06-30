@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, NavLink } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import OnboardingWizard from '../OnboardingWizard'
 import { useLocations } from '../../hooks/useLocations'
 import { requestFcmToken, onForegroundMessage } from '../../lib/firebase'
 import { firebaseAuthApi } from '../../api/endpoints'
+
+const MOBILE_NAV = [
+  { to: '/', label: 'Home', icon: '📊', exact: true },
+  { to: '/reviews', label: 'Reviews', icon: '⭐' },
+  { to: '/locations', label: 'Locations', icon: '📍' },
+  { to: '/campaigns', label: 'Campaigns', icon: '📧' },
+  { to: '/settings', label: 'Settings', icon: '⚙️' },
+]
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -60,10 +68,29 @@ export default function Layout() {
 
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <main className="flex-1 overflow-y-auto p-4 pb-20 lg:pb-6 lg:p-6">
           <Outlet />
         </main>
       </div>
+
+      {/* Mobile bottom navigation */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200 flex lg:hidden">
+        {MOBILE_NAV.map(({ to, label, icon, exact }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={exact}
+            className={({ isActive }) =>
+              `flex flex-col items-center justify-center flex-1 py-2 text-xs font-medium gap-0.5 transition-colors ${
+                isActive ? 'text-brand-600' : 'text-gray-400'
+              }`
+            }
+          >
+            <span className="text-xl leading-none">{icon}</span>
+            <span>{label}</span>
+          </NavLink>
+        ))}
+      </nav>
 
       {showWizard && <OnboardingWizard onDone={dismissWizard} />}
     </div>

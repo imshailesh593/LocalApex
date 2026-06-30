@@ -163,3 +163,12 @@ export const notificationPrefsApi = {
   get: () => api.get('/notification-prefs'),
   update: (data: object) => api.patch('/notification-prefs', data),
 }
+
+export const reviewReplyApi = {
+  get: (reviewId: string) => api.get(`/reviews/${reviewId}/reply`),
+  send: (reviewId: string, body: string) => api.post(`/reviews/${reviewId}/reply`, { body }),
+}
+
+export const publicApi = {
+  biz: (slug: string) => api.get(`/api/v1/public/biz/${slug}`),
+}

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useReviews, useGenerateReviewResponse, useReviewStats } from '../hooks/useReviews'
 import { useLocations } from '../hooks/useLocations'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { reviewsApi, templatesApi, authApi } from '../api/endpoints'
+import { reviewsApi, templatesApi, authApi, reviewReplyApi } from '../api/endpoints'
 import { downloadCsv } from '../utils/downloadCsv'
 import { useToast } from '../context/ToastContext'
 import DataTable, { Column } from '../components/ui/DataTable'
@@ -29,6 +29,8 @@ export default function Reviews() {
   const [notesReviewId, setNotesReviewId] = useState<string | null>(null)
   const [newNote, setNewNote] = useState('')
   const [assignReviewId, setAssignReviewId] = useState<string | null>(null)
+  const [replyReviewId, setReplyReviewId] = useState<string | null>(null)
+  const [replyBody, setReplyBody] = useState('')
   const PER_PAGE = 20
 
   const { data: stats } = useReviewStats()
@@ -136,6 +138,19 @@ export default function Reviews() {
       setAssignReviewId(null)
       toast.success('Review assigned')
     },
+  })
+
+  const sendReply = useMutation({
+    mutationFn: ({ reviewId, body }: { reviewId: string; body: string }) =>
+      reviewReplyApi.send(reviewId, body).then(r => r.data),
+    onSuccess: (data: { sent: boolean; email: string | null }) => {
+      qc.invalidateQueries({ queryKey: ['reviews'] })
+      setReplyReviewId(null)
+      setReplyBody('')
+      if (data.sent) toast.success(`Reply sent to ${data.email}`)
+      else toast.success('Reply saved (no email — reviewer email not captured)')
+    },
+    onError: () => toast.error('Failed to send reply'),
   })
 
   const columns: Column<Review>[] = [
@@ -268,6 +283,36 @@ export default function Reviews() {
                   <option value="">Unassign</option>
                   {teamMembers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
+              </div>
+            )}
+            <button
+              onClick={() => {
+                setReplyReviewId(replyReviewId === String(val) ? null : String(val))
+                setReplyBody('')
+              }}
+              className="text-xs text-indigo-500 hover:text-indigo-700"
+            >
+              Reply to reviewer
+            </button>
+            {replyReviewId === String(val) && (
+              <div className="mt-2 space-y-1.5">
+                <textarea
+                  value={replyBody}
+                  onChange={e => setReplyBody(e.target.value)}
+                  rows={3}
+                  placeholder={row.reviewer_email ? 'Write your reply — will be emailed to reviewer' : 'Write your reply (no email on file — saves internally only)'}
+                  className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => sendReply.mutate({ reviewId: String(val), body: replyBody })}
+                    disabled={!replyBody.trim() || sendReply.isPending}
+                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 hover:bg-indigo-700"
+                  >
+                    {sendReply.isPending ? 'Sending…' : row.reviewer_email ? 'Send email' : 'Save reply'}
+                  </button>
+                  <button onClick={() => setReplyReviewId(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                </div>
               </div>
             )}
           </div>

@@ -24,6 +24,7 @@ import LandingPage from './pages/LandingPage'
 import WidgetEmbed from './pages/WidgetEmbed'
 import Campaigns from './pages/Campaigns'
 import LocationsOverview from './pages/LocationsOverview'
+import PublicProfile from './pages/PublicProfile'
 import NotFound from './pages/NotFound'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/r/:slug" element={<PublicReview />} />
             <Route path="/widget/:slug" element={<WidgetEmbed />} />
+            <Route path="/biz/:slug" element={<PublicProfile />} />
             <Route
               path="/"
               element={
