@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import clsx from 'clsx'
 import { useReviewStats } from '../../hooks/useReviews'
 import { useTenant } from '../../context/TenantContext'
+import { useAuth } from '../../context/AuthContext'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '📊' },
@@ -20,6 +21,12 @@ const navItems = [
   { to: '/plan', label: 'Upgrade Plan', icon: '💎' },
 ]
 
+const adminItems = [
+  { to: '/admin', label: 'Admin Panel', icon: '🛡️' },
+  { to: '/admin/tenants', label: 'Tenants', icon: '🏢' },
+  { to: '/admin/users', label: 'All Users', icon: '👥' },
+]
+
 interface Props {
   onClose?: () => void
 }
@@ -27,7 +34,9 @@ interface Props {
 export default function Sidebar({ onClose }: Props) {
   const { data: stats } = useReviewStats()
   const { tenant } = useTenant()
+  const { user } = useAuth()
   const unread = stats?.unread ?? 0
+  const isSuperAdmin = user?.role === 'superadmin'
 
   return (
     <aside className="w-56 h-full bg-white border-r border-gray-200 flex flex-col">
@@ -69,6 +78,28 @@ export default function Sidebar({ onClose }: Props) {
             )}
           </NavLink>
         ))}
+        {isSuperAdmin && (
+          <>
+            <div className="mt-4 mb-1 px-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase">Admin</p>
+            </div>
+            {adminItems.map(({ to, label, icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/admin'}
+                onClick={onClose}
+                className={({ isActive }) =>
+                  clsx('flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                    isActive ? 'bg-red-50 text-red-700' : 'text-gray-600 hover:bg-gray-100')
+                }
+              >
+                <span>{icon}</span>
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
     </aside>
   )

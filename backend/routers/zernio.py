@@ -45,10 +45,12 @@ async def _ensure_profile(tenant: Tenant, db: AsyncSession) -> str:
     settings = get_settings()
     if not settings.zernio_api_key:
         raise HTTPException(status_code=503, detail="Zernio not configured. Add ZERNIO_API_KEY to .env")
-    profile = await zernio_svc.create_profile(tenant.business_name)
-    profile_id = profile.get("id") or profile.get("profileId") or profile.get("data", {}).get("id")
+    try:
+        profile_id = await zernio_svc.get_or_create_profile(tenant.business_name)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Zernio profile error: {e}")
     if not profile_id:
-        raise HTTPException(status_code=502, detail=f"Zernio profile creation failed: {profile}")
+        raise HTTPException(status_code=502, detail="Zernio profile creation failed")
     tenant.zernio_profile_id = profile_id
     await db.commit()
     return profile_id
@@ -95,7 +97,8 @@ async def sync_accounts(db: AsyncSession = Depends(get_db), cu=Depends(get_curre
     synced = 0
     result_list = []
     for acct in remote:
-        acct_id = acct.get("accountId") or acct.get("id")
+        # Real Zernio response uses _id, not accountId
+        acct_id = acct.get("_id") or acct.get("accountId") or acct.get("id")
         platform = acct.get("platform", "")
         username = acct.get("username") or acct.get("handle") or ""
         display_name = acct.get("displayName") or acct.get("name") or username
@@ -196,19 +199,16 @@ async def create_post(body: PostCreate, db: AsyncSession = Depends(get_db), cu=D
     try:
         zernio_resp = await zernio_svc.create_post(
             profile_id=tenant.zernio_profile_id,
-            account_ids=[body.zernio_account_id],
-            text=body.content,
+            account_id=body.zernio_account_id,
             platform=body.platform,
+            text=body.content,
             scheduled_at=body.scheduled_at,
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Zernio post failed: {e}")
 
-    zernio_post_id = (
-        zernio_resp.get("id") or
-        zernio_resp.get("postId") or
-        (zernio_resp.get("data") or {}).get("id")
-    )
+    # Real response uses _id
+    zernio_post_id = zernio_resp.get("_id") or zernio_resp.get("id") or zernio_resp.get("postId")
 
     post = GbpPost(
         id=str(uuid.uuid4()),

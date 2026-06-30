@@ -173,6 +173,16 @@ export const publicApi = {
   biz: (slug: string) => api.get(`/api/v1/public/biz/${slug}`),
 }
 
+export const adminApi = {
+  stats: () => api.get('/admin/stats'),
+  tenants: (params?: object) => api.get('/admin/tenants', { params }),
+  tenantDetail: (id: string) => api.get(`/admin/tenants/${id}`),
+  updateTenant: (id: string, body: object) => api.patch(`/admin/tenants/${id}`, body),
+  impersonate: (id: string) => api.post(`/admin/tenants/${id}/impersonate`),
+  users: (params?: object) => api.get('/admin/users', { params }),
+  setUserRole: (id: string, role: string) => api.patch(`/admin/users/${id}/role`, { role }),
+}
+
 export const zernioApi = {
   platforms: () => api.get('/zernio/platforms'),
   connectUrl: (platform: string) => api.get(`/zernio/connect-url/${platform}`),

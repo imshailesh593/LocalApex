@@ -26,6 +26,10 @@ import Campaigns from './pages/Campaigns'
 import LocationsOverview from './pages/LocationsOverview'
 import PublicProfile from './pages/PublicProfile'
 import SocialAccounts from './pages/SocialAccounts'
+import AdminDashboard from './pages/admin/AdminDashboard'
+import AdminTenants from './pages/admin/AdminTenants'
+import AdminTenantDetail from './pages/admin/AdminTenantDetail'
+import AdminUsers from './pages/admin/AdminUsers'
 import NotFound from './pages/NotFound'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -71,6 +75,10 @@ export default function App() {
               <Route path="campaigns" element={<Campaigns />} />
               <Route path="locations/overview" element={<LocationsOverview />} />
               <Route path="social" element={<SocialAccounts />} />
+              <Route path="admin" element={<AdminDashboard />} />
+              <Route path="admin/tenants" element={<AdminTenants />} />
+              <Route path="admin/tenants/:id" element={<AdminTenantDetail />} />
+              <Route path="admin/users" element={<AdminUsers />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
