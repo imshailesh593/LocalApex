@@ -138,6 +138,20 @@ export const competitorHistoryApi = {
   get: (id: string, days = 30) => api.get(`/competitors/${id}/history`, { params: { days } }),
 }
 
+export const campaignsApi = {
+  list: () => api.get('/campaigns'),
+  create: (data: object) => api.post('/campaigns', data),
+  cancel: (id: string) => api.delete(`/campaigns/${id}`),
+}
+
+export const reviewsImportApi = {
+  importCsv: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/reviews/import-csv', fd)
+  },
+}
+
 export const widgetApi = {
   data: (slug: string) => api.get(`/widget/data/${slug}`),
 }

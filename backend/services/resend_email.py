@@ -23,11 +23,11 @@ async def send_email(to: str, subject: str, html: str) -> None:
         pass
 
 
-def review_request_html(business_name: str, funnel_url: str, custom_message: str = "") -> str:
+def review_request_html(business_name: str, funnel_url: str, custom_message: str = "", brand_color: str = "#1d4ed8") -> str:
     message = custom_message or f"We'd love to hear about your recent experience at {business_name}."
     return f"""
     <div style="font-family:sans-serif;max-width:480px;margin:auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-      <div style="background:#1d4ed8;padding:20px 24px">
+      <div style="background:{brand_color};padding:20px 24px">
         <h1 style="color:#fff;margin:0;font-size:18px">{business_name}</h1>
       </div>
       <div style="padding:28px 24px;text-align:center">
@@ -35,7 +35,7 @@ def review_request_html(business_name: str, funnel_url: str, custom_message: str
         <p style="font-size:16px;color:#111;margin:0 0 8px;font-weight:600">How was your experience?</p>
         <p style="font-size:14px;color:#6b7280;margin:0 0 24px">{message}</p>
         <a href="{funnel_url}"
-           style="display:inline-block;background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700">
+           style="display:inline-block;background:{brand_color};color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700">
           Leave a Review →
         </a>
       </div>

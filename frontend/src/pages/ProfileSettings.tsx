@@ -14,6 +14,7 @@ export default function ProfileSettings() {
   const [name, setName] = useState('')
   const [notifEmail, setNotifEmail] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
+  const [brandColor, setBrandColor] = useState('#1d4ed8')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -117,6 +118,7 @@ export default function ProfileSettings() {
       setName(tenant.business_name)
       setNotifEmail(tenant.notification_email ?? '')
       setLogoUrl(tenant.logo_url ?? '')
+      setBrandColor((tenant as { brand_color?: string }).brand_color ?? '#1d4ed8')
     }
   }, [tenant])
 
@@ -124,7 +126,7 @@ export default function ProfileSettings() {
     e.preventDefault()
     setSaving(true)
     try {
-      await tenantApi.update({ business_name: name, notification_email: notifEmail || null, logo_url: logoUrl || null })
+      await tenantApi.update({ business_name: name, notification_email: notifEmail || null, logo_url: logoUrl || null, brand_color: brandColor })
       await refresh()
       setSaved(true)
       toast.success('Settings saved')
@@ -186,6 +188,16 @@ export default function ProfileSettings() {
             <input value={logoUrl} onChange={e => setLogoUrl(e.target.value)}
               placeholder="https://yourdomain.com/logo.png" className={inputCls} />
             <p className="text-xs text-gray-400 mt-1">Shown in the sidebar header.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Brand Color</label>
+            <div className="flex items-center gap-3">
+              <input type="color" value={brandColor} onChange={e => setBrandColor(e.target.value)}
+                className="h-9 w-16 rounded-lg border border-gray-300 cursor-pointer p-0.5" />
+              <input value={brandColor} onChange={e => setBrandColor(e.target.value)}
+                placeholder="#1d4ed8" className={`${inputCls} w-36`} />
+              <span className="text-xs text-gray-400">Used in review request emails and widgets.</span>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Review Notification Email</label>

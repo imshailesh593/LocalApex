@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -331,3 +331,84 @@ async def delete_note(review_id: str, note_id: str, current_user=Depends(get_cur
 @router.get("/health/{location_id}")
 async def location_health(location_id: str, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     return await compute_health_score(db, current_user["tenant_id"], location_id)
+
+
+# ── Review CSV import ────────────────────────────────────────────────────────
+
+@router.post("/import-csv")
+async def import_reviews_csv(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Columns: reviewer_name, rating (1-5), comment, location_id (optional),
+             reviewer_email (optional), date (optional ISO format)
+    """
+    from services.review_funnel import process_review
+    content = await file.read()
+    text = content.decode("utf-8-sig").strip()
+    reader = csv.DictReader(io.StringIO(text))
+    imported, errors = 0, []
+
+    # get first location as fallback
+    first_loc_res = await db.execute(
+        select(Location).where(Location.tenant_id == current_user["tenant_id"], Location.is_deleted == False)
+    )
+    first_location = first_loc_res.scalars().first()
+
+    for i, row in enumerate(reader, 1):
+        raw_rating = (row.get("rating") or "").strip()
+        if not raw_rating:
+            errors.append(f"Row {i}: missing rating")
+            continue
+        try:
+            rating = int(float(raw_rating))
+        except ValueError:
+            errors.append(f"Row {i}: invalid rating '{raw_rating}'")
+            continue
+        if not (1 <= rating <= 5):
+            errors.append(f"Row {i}: rating must be 1–5")
+            continue
+
+        location_id = (row.get("location_id") or "").strip()
+        if location_id:
+            loc_check = await db.execute(
+                select(Location).where(Location.id == location_id, Location.tenant_id == current_user["tenant_id"])
+            )
+            if not loc_check.scalar_one_or_none():
+                errors.append(f"Row {i}: location_id not found")
+                continue
+        elif first_location:
+            location_id = first_location.id
+        else:
+            errors.append(f"Row {i}: no location available")
+            continue
+
+        # Parse optional date
+        created_at = None
+        raw_date = (row.get("date") or "").strip()
+        if raw_date:
+            try:
+                from dateutil import parser as date_parser
+                created_at = date_parser.parse(raw_date)
+            except Exception:
+                pass
+
+        review = ReviewFunnel(
+            tenant_id=current_user["tenant_id"],
+            location_id=location_id,
+            reviewer_name=(row.get("reviewer_name") or "").strip() or "Imported",
+            reviewer_email=(row.get("reviewer_email") or "").strip() or None,
+            rating=rating,
+            comment=(row.get("comment") or "").strip() or None,
+            source="import",
+        )
+        review = process_review(review)
+        review.sentiment = classify_sentiment(rating, review.comment)
+        if created_at:
+            review.created_at = created_at
+        db.add(review)
+        imported += 1
+
+    return {"imported": imported, "errors": errors}

@@ -22,6 +22,8 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import LandingPage from './pages/LandingPage'
 import WidgetEmbed from './pages/WidgetEmbed'
+import Campaigns from './pages/Campaigns'
+import LocationsOverview from './pages/LocationsOverview'
 import NotFound from './pages/NotFound'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -63,6 +65,8 @@ export default function App() {
               <Route path="plan" element={<PlanPage />} />
               <Route path="reports" element={<Reports />} />
               <Route path="activity" element={<ActivityLog />} />
+              <Route path="campaigns" element={<Campaigns />} />
+              <Route path="locations/overview" element={<LocationsOverview />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

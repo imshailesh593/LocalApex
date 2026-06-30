@@ -11,6 +11,8 @@ const navItems = [
   { to: '/citations', label: 'Citations', icon: '📋' },
   { to: '/qa', label: 'Q&A Manager', icon: '💬' },
   { to: '/media', label: 'Media', icon: '🖼️' },
+  { to: '/campaigns', label: 'Campaigns', icon: '📧' },
+  { to: '/locations/overview', label: 'All Locations', icon: '🗺️' },
   { to: '/reports', label: 'Reports', icon: '📈' },
   { to: '/activity', label: 'Activity', icon: '🕐' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
