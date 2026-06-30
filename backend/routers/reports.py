@@ -10,7 +10,7 @@ from models.competitor import Competitor
 from models.insight import Insight
 from models.tenant import Tenant
 from services.auth import get_current_user
-from services.email import send_email
+from services.resend_email import send_email
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 

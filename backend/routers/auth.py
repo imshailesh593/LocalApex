@@ -8,7 +8,7 @@ from models.tenant import Tenant
 from models.password_reset import PasswordResetToken
 from schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse, PasswordChange, UserInvite
 from services.auth import hash_password, verify_password, create_access_token, get_current_user
-from services.email import send_email
+from services.resend_email import send_email
 from services.firebase_auth import verify_firebase_token
 from config import get_settings
 from datetime import datetime, timedelta

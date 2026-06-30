@@ -11,7 +11,7 @@ from services.auth import get_current_user
 from services.review_funnel import process_review
 from services.ai_responder import generate_review_response
 from services.notifications import push as push_notification
-from services.email import send_email, review_notification_html, review_request_html
+from services.resend_email import send_email, review_notification_html, review_request_html
 from services.webhooks import fire_event
 from services.activity import log as activity_log
 from models.tenant import Tenant
