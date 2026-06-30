@@ -12,6 +12,7 @@ const navItems = [
   { to: '/qa', label: 'Q&A Manager', icon: '💬' },
   { to: '/media', label: 'Media', icon: '🖼️' },
   { to: '/campaigns', label: 'Campaigns', icon: '📧' },
+  { to: '/social', label: 'Social Posting', icon: '📡' },
   { to: '/locations/overview', label: 'All Locations', icon: '🗺️' },
   { to: '/reports', label: 'Reports', icon: '📈' },
   { to: '/activity', label: 'Activity', icon: '🕐' },

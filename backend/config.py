@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # Resend
     resend_api_key: str = ""
     resend_from_email: str = "noreply@localapex.dev"
+    # Zernio
+    zernio_api_key: str = ""
 
     @property
     def origins_list(self) -> list[str]:

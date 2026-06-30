@@ -172,3 +172,13 @@ export const reviewReplyApi = {
 export const publicApi = {
   biz: (slug: string) => api.get(`/api/v1/public/biz/${slug}`),
 }
+
+export const zernioApi = {
+  platforms: () => api.get('/zernio/platforms'),
+  connectUrl: (platform: string) => api.get(`/zernio/connect-url/${platform}`),
+  syncAccounts: () => api.post('/zernio/accounts/sync'),
+  accounts: () => api.get('/zernio/accounts'),
+  disconnect: (id: string) => api.delete(`/zernio/accounts/${id}`),
+  createPost: (data: object) => api.post('/zernio/posts', data),
+  posts: (platform?: string) => api.get('/zernio/posts', { params: platform ? { platform } : {} }),
+}

@@ -25,6 +25,7 @@ import WidgetEmbed from './pages/WidgetEmbed'
 import Campaigns from './pages/Campaigns'
 import LocationsOverview from './pages/LocationsOverview'
 import PublicProfile from './pages/PublicProfile'
+import SocialAccounts from './pages/SocialAccounts'
 import NotFound from './pages/NotFound'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -69,6 +70,7 @@ export default function App() {
               <Route path="activity" element={<ActivityLog />} />
               <Route path="campaigns" element={<Campaigns />} />
               <Route path="locations/overview" element={<LocationsOverview />} />
+              <Route path="social" element={<SocialAccounts />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
