@@ -4,6 +4,11 @@ import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 import { citationsApi, reviewsApi } from '../api/endpoints'
 
+interface HealthScore {
+  score: number; grade: string; avg_rating: number
+  total_reviews: number; response_rate: number; citation_health: number
+}
+
 const API_BASE = 'http://localhost:8000/api/v1'
 
 interface LocationReport {
@@ -43,6 +48,12 @@ export default function LocationDetail() {
   const { data: report, isLoading } = useQuery<LocationReport>({
     queryKey: ['location-report', id],
     queryFn: () => api.get(`/reports/location/${id}`).then(r => r.data),
+    enabled: !!id,
+  })
+
+  const { data: health } = useQuery<HealthScore>({
+    queryKey: ['location-health', id],
+    queryFn: () => reviewsApi.healthScore(id!).then(r => r.data),
     enabled: !!id,
   })
 
@@ -120,6 +131,36 @@ export default function LocationDetail() {
       {/* Overview */}
       {tab === 'overview' && (
         <div className="space-y-4">
+          {/* Health score */}
+          {health && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-6">
+              <div className="flex-shrink-0 text-center">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white ${
+                  health.grade === 'A' ? 'bg-green-500' : health.grade === 'B' ? 'bg-blue-500' : health.grade === 'C' ? 'bg-yellow-500' : 'bg-red-500'
+                }`}>
+                  {health.grade}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Health</p>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-gray-700">Overall Score</span>
+                  <span className="text-lg font-bold text-gray-900">{health.score}/100</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-3">
+                  <div
+                    className={`h-full rounded-full transition-all ${health.grade === 'A' ? 'bg-green-500' : health.grade === 'B' ? 'bg-blue-500' : health.grade === 'C' ? 'bg-yellow-500' : 'bg-red-500'}`}
+                    style={{ width: `${health.score}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-xs text-gray-500">
+                  <span>Response rate: <b className="text-gray-800">{health.response_rate}%</b></span>
+                  <span>Citation health: <b className="text-gray-800">{health.citation_health}%</b></span>
+                  <span>Reviews: <b className="text-gray-800">{health.total_reviews}</b></span>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: 'Total Reviews', value: rv.total, icon: '💬' },

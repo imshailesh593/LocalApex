@@ -15,7 +15,11 @@ from services.resend_email import send_email, review_notification_html, review_r
 from services.webhooks import fire_event
 from services.fcm import send_push
 from services.activity import log as activity_log
+from services.sentiment import classify_sentiment
+from services.health_score import compute_health_score
 from models.tenant import Tenant
+from models.review_note import ReviewNote
+from models.user import User
 from config import get_settings
 import csv, io
 
@@ -49,6 +53,7 @@ async def submit_public_review(funnel_slug: str, payload: PublicReviewCreate, db
         source="public_funnel",
     )
     review = process_review(review)
+    review.sentiment = classify_sentiment(payload.rating, payload.comment)
     db.add(review)
     await db.flush()
     await db.refresh(review)
@@ -269,3 +274,60 @@ async def update_review(review_id: str, payload: ReviewUpdate, current_user=Depe
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(review, field, value)
     return review
+
+
+# ── Review Notes ────────────────────────────────────────────────────────────
+
+class NoteCreate(BaseModel):
+    body: str
+
+
+@router.get("/{review_id}/notes")
+async def list_notes(review_id: str, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ReviewNote)
+        .where(ReviewNote.review_id == review_id, ReviewNote.tenant_id == current_user["tenant_id"])
+        .order_by(ReviewNote.created_at.asc())
+    )
+    notes = result.scalars().all()
+    return [
+        {"id": n.id, "author_name": n.author_name, "body": n.body, "created_at": n.created_at.isoformat()}
+        for n in notes
+    ]
+
+
+@router.post("/{review_id}/notes", status_code=201)
+async def add_note(review_id: str, payload: NoteCreate, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    user_result = await db.execute(select(User).where(User.id == current_user["sub"]))
+    user = user_result.scalar_one_or_none()
+    author = user.name if user else "Team"
+
+    note = ReviewNote(
+        tenant_id=current_user["tenant_id"],
+        review_id=review_id,
+        user_id=current_user["sub"],
+        author_name=author,
+        body=payload.body,
+    )
+    db.add(note)
+    await db.flush()
+    await db.refresh(note)
+    return {"id": note.id, "author_name": note.author_name, "body": note.body, "created_at": note.created_at.isoformat()}
+
+
+@router.delete("/{review_id}/notes/{note_id}", status_code=204)
+async def delete_note(review_id: str, note_id: str, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ReviewNote).where(ReviewNote.id == note_id, ReviewNote.tenant_id == current_user["tenant_id"])
+    )
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    await db.delete(note)
+
+
+# ── Health score ─────────────────────────────────────────────────────────────
+
+@router.get("/health/{location_id}")
+async def location_health(location_id: str, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    return await compute_health_score(db, current_user["tenant_id"], location_id)

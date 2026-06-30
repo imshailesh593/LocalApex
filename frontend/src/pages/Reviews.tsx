@@ -21,10 +21,13 @@ export default function Reviews() {
   const [locationId, setLocationId] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [ratingFilter, setRatingFilter] = useState('')
+  const [sentimentFilter, setSentimentFilter] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [expandedAI, setExpandedAI] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [notesReviewId, setNotesReviewId] = useState<string | null>(null)
+  const [newNote, setNewNote] = useState('')
   const PER_PAGE = 20
 
   const { data: stats } = useReviewStats()
@@ -39,6 +42,7 @@ export default function Reviews() {
     ...(locationId ? { location_id: locationId } : {}),
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(ratingFilter === 'positive' ? { min_rating: 4 } : ratingFilter === 'negative' ? { max_rating: 3 } : {}),
+    ...(sentimentFilter ? { sentiment: sentimentFilter } : {}),
   }
 
   const qc = useQueryClient()
@@ -101,6 +105,22 @@ export default function Reviews() {
     },
   })
 
+  const { data: notes = [] } = useQuery<{ id: string; author_name: string; body: string; created_at: string }[]>({
+    queryKey: ['review-notes', notesReviewId],
+    queryFn: () => reviewsApi.notes(notesReviewId!).then(r => r.data),
+    enabled: !!notesReviewId,
+  })
+
+  const addNote = useMutation({
+    mutationFn: () => reviewsApi.addNote(notesReviewId!, newNote).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['review-notes', notesReviewId] }); setNewNote('') },
+  })
+
+  const deleteNote = useMutation({
+    mutationFn: (noteId: string) => reviewsApi.deleteNote(notesReviewId!, noteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['review-notes', notesReviewId] }),
+  })
+
   const columns: Column<Review>[] = [
     {
       key: 'id',
@@ -147,6 +167,16 @@ export default function Reviews() {
       key: 'status',
       label: 'Status',
       render: (val) => <Badge label={String(val)} variant={statusVariant(String(val))} />,
+    },
+    {
+      key: 'sentiment',
+      label: 'Sentiment',
+      render: (val) => {
+        if (!val) return <span className="text-gray-300 text-xs">—</span>
+        const s = String(val)
+        const cls = s === 'positive' ? 'text-green-600 bg-green-50' : s === 'negative' ? 'text-red-500 bg-red-50' : 'text-gray-500 bg-gray-100'
+        return <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${cls}`}>{s}</span>
+      },
     },
     {
       key: 'id',
@@ -199,6 +229,12 @@ export default function Reviews() {
                 Mark Responded
               </button>
             )}
+            <button
+              onClick={() => setNotesReviewId(notesReviewId === String(val) ? null : String(val))}
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              Notes
+            </button>
           </div>
           {row.ai_response && (
             <div className="mt-1">
@@ -313,9 +349,19 @@ export default function Reviews() {
           <option value="positive">Positive (4-5 ⭐)</option>
           <option value="negative">Negative (1-3 ⭐)</option>
         </select>
-        {(locationId || statusFilter || ratingFilter) && (
+        <select
+          value={sentimentFilter}
+          onChange={e => setSentimentFilter(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+        >
+          <option value="">All sentiments</option>
+          <option value="positive">Positive</option>
+          <option value="neutral">Neutral</option>
+          <option value="negative">Negative</option>
+        </select>
+        {(locationId || statusFilter || ratingFilter || sentimentFilter) && (
           <button
-            onClick={() => { setLocationId(''); setStatusFilter(''); setRatingFilter(''); setPage(1) }}
+            onClick={() => { setLocationId(''); setStatusFilter(''); setRatingFilter(''); setSentimentFilter(''); setPage(1) }}
             className="text-sm text-gray-400 hover:text-gray-600 px-2"
           >
             Clear filters
@@ -461,6 +507,58 @@ export default function Reviews() {
                   {requestSending ? 'Sending…' : 'Send emails'}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Notes drawer */}
+      {notesReviewId && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setNotesReviewId(null)} />
+          <div className="relative bg-white w-80 flex flex-col h-full shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <h3 className="text-sm font-bold text-gray-900">Internal Notes</h3>
+              <button onClick={() => setNotesReviewId(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {notes.length === 0 && (
+                <p className="text-xs text-gray-400">No notes yet. Add one below.</p>
+              )}
+              {notes.map(n => (
+                <div key={n.id} className="bg-gray-50 rounded-lg p-3 space-y-1 group">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-700">{n.author_name}</span>
+                    <button
+                      onClick={() => deleteNote.mutate(n.id)}
+                      className="text-xs text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-600">{n.body}</p>
+                  <p className="text-xs text-gray-400">{new Date(n.created_at).toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+            <form
+              onSubmit={e => { e.preventDefault(); if (newNote.trim()) addNote.mutate() }}
+              className="border-t border-gray-200 p-4 space-y-2"
+            >
+              <textarea
+                value={newNote}
+                onChange={e => setNewNote(e.target.value)}
+                placeholder="Add a private note…"
+                rows={3}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              <button
+                type="submit"
+                disabled={addNote.isPending || !newNote.trim()}
+                className="w-full bg-brand-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
+              >
+                {addNote.isPending ? 'Saving…' : 'Add Note'}
+              </button>
             </form>
           </div>
         </div>

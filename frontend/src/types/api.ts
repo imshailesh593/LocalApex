@@ -42,6 +42,7 @@ export interface Review extends BaseRecord {
   status: 'pending' | 'routed' | 'suppressed' | 'responded'
   ai_response: string | null
   source: string
+  sentiment: 'positive' | 'neutral' | 'negative' | null
 }
 
 export interface Citation extends BaseRecord {

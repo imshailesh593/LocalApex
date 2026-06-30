@@ -24,3 +24,4 @@ class ReviewFunnel(TenantBase):
     ai_response: Mapped[str | None] = mapped_column(Text, nullable=True)
     google_review_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(String(50), default="funnel")
+    sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True)

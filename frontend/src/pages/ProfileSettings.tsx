@@ -532,6 +532,38 @@ export default function ProfileSettings() {
           {regenerateApiKey.isPending ? 'Regenerating…' : 'Regenerate key'}
         </button>
       </div>
+
+      {/* Data & Privacy */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700">Data & Privacy</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Download a copy of all your account data — locations, reviews, citations, users.
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const res = await tenantApi.exportData()
+              const blob = new Blob([res.data as BlobPart], { type: 'application/json' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `localapex-export-${new Date().toISOString().slice(0, 10)}.json`
+              document.body.appendChild(a)
+              a.click()
+              document.body.removeChild(a)
+              URL.revokeObjectURL(url)
+              toast.success('Export downloaded')
+            } catch {
+              toast.error('Export failed')
+            }
+          }}
+          className="text-sm border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50"
+        >
+          Download my data (JSON)
+        </button>
+      </div>
     </div>
   )
 }

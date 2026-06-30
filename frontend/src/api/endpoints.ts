@@ -28,7 +28,7 @@ export const locationsApi = {
 }
 
 export const reviewsApi = {
-  list: (filters?: ReviewFilters & { page?: number; per_page?: number }) =>
+  list: (filters?: ReviewFilters & { page?: number; per_page?: number; sentiment?: string }) =>
     api.get('/reviews', { params: filters ?? {} }),
   stats: () => api.get('/reviews/stats'),
   submit: (data: object) => api.post('/reviews', data),
@@ -36,6 +36,10 @@ export const reviewsApi = {
   generateResponse: (id: string) => api.post(`/reviews/${id}/generate-response`),
   requestReviews: (data: { location_id: string; emails: string[]; custom_message?: string }) =>
     api.post('/reviews/request-reviews', data),
+  notes: (reviewId: string) => api.get(`/reviews/${reviewId}/notes`),
+  addNote: (reviewId: string, body: string) => api.post(`/reviews/${reviewId}/notes`, { body }),
+  deleteNote: (reviewId: string, noteId: string) => api.delete(`/reviews/${reviewId}/notes/${noteId}`),
+  healthScore: (locationId: string) => api.get(`/reviews/health/${locationId}`),
 }
 
 export const competitorsApi = {
@@ -103,6 +107,7 @@ export const tenantApi = {
   me: () => api.get('/tenants/me'),
   update: (data: object) => api.patch('/tenants/me', data),
   regenerateApiKey: () => api.post('/tenants/regenerate-api-key'),
+  exportData: () => api.get('/tenants/export-data', { responseType: 'blob' }),
 }
 
 export const citationsImportApi = {
