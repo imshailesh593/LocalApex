@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { citationsApi } from '../api/endpoints'
+import { citationsApi, citationsImportApi } from '../api/endpoints'
 import { useLocations } from '../hooks/useLocations'
 import Badge from '../components/ui/Badge'
 import Pagination from '../components/ui/Pagination'
@@ -33,6 +33,17 @@ export default function Citations() {
   const [page, setPage] = useState(1)
   const qc = useQueryClient()
   const toast = useToast()
+  const csvRef = useRef<HTMLInputElement>(null)
+
+  const importCsv = useMutation({
+    mutationFn: (file: File) => citationsImportApi.importCsv(file).then(r => r.data),
+    onSuccess: (data: { imported: number; errors: string[] }) => {
+      qc.invalidateQueries({ queryKey: ['citations'] })
+      toast.success(`Imported ${data.imported} citation${data.imported !== 1 ? 's' : ''}`)
+      if (data.errors.length) toast.error(`${data.errors.length} rows skipped`)
+    },
+    onError: () => toast.error('Import failed'),
+  })
   const { data: citations = [], isLoading } = useQuery<Citation[]>({
     queryKey: ['citations', page],
     queryFn: () => citationsApi.list({ page, per_page: PER_PAGE }).then(r => r.data),
@@ -90,6 +101,15 @@ export default function Citations() {
           {unchecked > 0 && <span className="text-sm text-gray-400">{unchecked} unchecked</span>}
           {citations.length > 0 && (
             <>
+              <input ref={csvRef} type="file" accept=".csv" className="hidden"
+                onChange={e => e.target.files?.[0] && importCsv.mutate(e.target.files[0])} />
+              <button
+                onClick={() => csvRef.current?.click()}
+                disabled={importCsv.isPending}
+                className="border border-gray-300 text-gray-600 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                {importCsv.isPending ? 'Importing…' : 'Import CSV'}
+              </button>
               <button
                 onClick={() => downloadCsv('/citations/export', `citations-${new Date().toISOString().slice(0,10)}.csv`).catch(() => toast.error('Export failed'))}
                 className="border border-gray-300 text-gray-600 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -44,11 +44,11 @@ async def export_citations(current_user=Depends(get_current_user), db: AsyncSess
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['id', 'platform', 'listed_name', 'listed_address', 'listed_phone',
-                     'listed_website', 'status', 'nap_issues', 'profile_url', 'created_at'])
+    writer.writerow(['id', 'platform_name', 'platform_url', 'listed_name', 'listed_address',
+                     'listed_phone', 'status', 'nap_match', 'location_id', 'created_at'])
     for c in citations:
-        writer.writerow([c.id, c.platform, c.listed_name, c.listed_address, c.listed_phone,
-                         c.listed_website, c.status, c.nap_issues, c.profile_url, c.created_at])
+        writer.writerow([c.id, c.platform_name, c.platform_url, c.listed_name, c.listed_address,
+                         c.listed_phone, c.status, c.nap_match, c.location_id, c.created_at])
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -103,6 +103,56 @@ async def delete_citation(citation_id: str, current_user=Depends(get_current_use
     if not citation:
         raise HTTPException(status_code=404, detail="Citation not found")
     citation.is_deleted = True
+
+
+@router.post("/import-csv")
+async def import_citations_csv(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    content = await file.read()
+    text = content.decode("utf-8-sig").strip()
+    reader = csv.DictReader(io.StringIO(text))
+    imported, errors = 0, []
+
+    for i, row in enumerate(reader, 1):
+        platform = (row.get("platform_name") or row.get("platform") or "").strip()
+        if not platform:
+            errors.append(f"Row {i}: missing platform")
+            continue
+        location_id = (row.get("location_id") or "").strip()
+        if location_id:
+            loc_check = await db.execute(
+                select(Location).where(Location.id == location_id, Location.tenant_id == current_user["tenant_id"])
+            )
+            if not loc_check.scalar_one_or_none():
+                errors.append(f"Row {i}: location_id not found")
+                continue
+        else:
+            # Use first available location if not specified
+            first_loc = await db.execute(
+                select(Location).where(Location.tenant_id == current_user["tenant_id"], Location.is_deleted == False)
+            )
+            first = first_loc.scalars().first()
+            if not first:
+                errors.append(f"Row {i}: no location found for this tenant")
+                continue
+            location_id = first.id
+
+        c = Citation(
+            tenant_id=current_user["tenant_id"],
+            location_id=location_id,
+            platform_name=platform,
+            platform_url=(row.get("platform_url") or row.get("profile_url") or "").strip() or None,
+            listed_name=(row.get("listed_name") or "").strip() or None,
+            listed_address=(row.get("listed_address") or "").strip() or None,
+            listed_phone=(row.get("listed_phone") or "").strip() or None,
+        )
+        db.add(c)
+        imported += 1
+
+    return {"imported": imported, "errors": errors}
 
 
 @router.get("/summary")

@@ -29,6 +29,20 @@ export default function ProfileSettings() {
   const [whForm, setWhForm] = useState({ url: '', events: ['review.new'] })
   const [showWhForm, setShowWhForm] = useState(false)
   const [copiedSecret, setCopiedSecret] = useState<string | null>(null)
+  const [apiKeyVisible, setApiKeyVisible] = useState(false)
+  const [apiKeyCopied, setApiKeyCopied] = useState(false)
+  const [localApiKey, setLocalApiKey] = useState<string | null>(null)
+
+  const regenerateApiKey = useMutation({
+    mutationFn: () => tenantApi.regenerateApiKey().then(r => r.data as { api_key: string }),
+    onSuccess: (data) => {
+      setLocalApiKey(data.api_key)
+      setApiKeyVisible(true)
+      toast.success('API key regenerated')
+      refresh()
+    },
+    onError: () => toast.error('Failed to regenerate key'),
+  })
 
   const { data: hooks = [] } = useQuery<Webhook[]>({
     queryKey: ['webhooks'],
@@ -472,6 +486,51 @@ export default function ProfileSettings() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* API Key */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700">API Key</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Use this key to authenticate requests to the LocalApex REST API.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono text-gray-700 truncate">
+            {apiKeyVisible
+              ? (localApiKey ?? tenant?.api_key ?? '—')
+              : '••••••••-••••-••••-••••-••••••••••••'}
+          </code>
+          <button
+            onClick={() => setApiKeyVisible(v => !v)}
+            className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 border border-gray-200 rounded-lg"
+          >
+            {apiKeyVisible ? 'Hide' : 'Show'}
+          </button>
+          <button
+            onClick={() => {
+              const key = localApiKey ?? tenant?.api_key ?? ''
+              navigator.clipboard.writeText(key)
+              setApiKeyCopied(true)
+              setTimeout(() => setApiKeyCopied(false), 2000)
+            }}
+            className="text-xs text-brand-600 hover:underline px-2 py-1.5 border border-brand-200 rounded-lg"
+          >
+            {apiKeyCopied ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+        <button
+          onClick={() => {
+            if (confirm('Regenerate the API key? The existing key will stop working immediately.')) {
+              regenerateApiKey.mutate()
+            }
+          }}
+          disabled={regenerateApiKey.isPending}
+          className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
+        >
+          {regenerateApiKey.isPending ? 'Regenerating…' : 'Regenerate key'}
+        </button>
       </div>
     </div>
   )

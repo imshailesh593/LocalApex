@@ -320,6 +320,35 @@ export default function Reviews() {
         </div>
       )}
 
+      {/* Star distribution */}
+      {stats && stats.total > 0 && (() => {
+        const dist = (stats as unknown as { star_distribution?: Record<string, number> }).star_distribution ?? {}
+        const max = Math.max(...Object.values(dist), 1)
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs font-semibold text-gray-500 mb-3">Rating breakdown</p>
+            <div className="space-y-1.5">
+              {[5, 4, 3, 2, 1].map(star => {
+                const count = dist[star] ?? 0
+                const pct = Math.round((count / max) * 100)
+                return (
+                  <div key={star} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 w-6 text-right">{star}★</span>
+                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${star >= 4 ? 'bg-green-400' : star === 3 ? 'bg-yellow-400' : 'bg-red-400'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-400 w-6">{count}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
       <DataTable<Review> data={reviews} columns={columns} loading={isLoading} />
       <Pagination
         page={page}

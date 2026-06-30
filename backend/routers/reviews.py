@@ -123,12 +123,23 @@ async def review_stats(current_user=Depends(get_current_user), db: AsyncSession 
             ReviewFunnel.is_deleted == False,
         )
     )).scalar_one()
+    star_dist = {}
+    for star in range(1, 6):
+        star_dist[star] = (await db.execute(
+            select(func.count(ReviewFunnel.id)).where(
+                ReviewFunnel.tenant_id == current_user["tenant_id"],
+                ReviewFunnel.is_deleted == False,
+                ReviewFunnel.rating == star,
+            )
+        )).scalar_one()
+
     return {
         "total": total,
         "suppressed": suppressed,
         "pending": pending,
         "unread": suppressed + pending,
         "avg_rating": round(float(avg), 1) if avg else None,
+        "star_distribution": star_dist,
     }
 
 

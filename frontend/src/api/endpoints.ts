@@ -102,4 +102,13 @@ export const activityApi = {
 export const tenantApi = {
   me: () => api.get('/tenants/me'),
   update: (data: object) => api.patch('/tenants/me', data),
+  regenerateApiKey: () => api.post('/tenants/regenerate-api-key'),
+}
+
+export const citationsImportApi = {
+  importCsv: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/citations/import-csv', fd)
+  },
 }
