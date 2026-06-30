@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     resend_from_email: str = "noreply@localapex.dev"
     # Zernio
     zernio_api_key: str = ""
+    # Google Business Profile
+    google_client_id: str = ""
+    google_client_secret: str = ""
 
     @property
     def origins_list(self) -> list[str]:

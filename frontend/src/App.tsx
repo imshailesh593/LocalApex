@@ -30,6 +30,8 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminTenants from './pages/admin/AdminTenants'
 import AdminTenantDetail from './pages/admin/AdminTenantDetail'
 import AdminUsers from './pages/admin/AdminUsers'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import TermsOfService from './pages/TermsOfService'
 import NotFound from './pages/NotFound'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -45,6 +47,8 @@ export default function App() {
         <TenantProvider>
           <Routes>
             <Route path="/home" element={<LandingPage />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />

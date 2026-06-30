@@ -32,5 +32,6 @@ class Tenant(Base):
     razorpay_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     brand_color: Mapped[str] = mapped_column(String(20), default="#1d4ed8")
     zernio_profile_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gmb_refresh_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

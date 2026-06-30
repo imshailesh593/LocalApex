@@ -6,7 +6,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from config import get_settings
 from database import engine, Base
-from routers import auth, tenants, locations, reviews, competitors, citations, qa, media, insights, nap, search, notifications, templates, reports, webhooks, activity, billing, widget, campaigns, notification_prefs, public, zernio, admin
+from routers import auth, tenants, locations, reviews, competitors, citations, qa, media, insights, nap, search, notifications, templates, reports, webhooks, activity, billing, widget, campaigns, notification_prefs, public, zernio, admin, gmb
 
 settings = get_settings()
 
@@ -60,6 +60,7 @@ app.include_router(notification_prefs.router, prefix="/api/v1")
 app.include_router(public.router, prefix="/api/v1")
 app.include_router(zernio.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(gmb.router, prefix="/api/v1")
 
 
 @app.get("/health")

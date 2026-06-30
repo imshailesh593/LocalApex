@@ -244,11 +244,13 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-gray-100 py-8 px-6 text-center text-sm text-gray-400">
-        <p>© {new Date().getFullYear()} LocalApex · Built with FastAPI + React · MIT License</p>
+        <p>© {new Date().getFullYear()} LocalApex · by <a href="https://mavericinfotech.in" className="hover:text-gray-600">Maveric InfoTech</a></p>
         <div className="flex justify-center gap-6 mt-3">
           <Link to="/login" className="hover:text-gray-600">Sign in</Link>
           <Link to="/register" className="hover:text-gray-600">Register</Link>
-          <a href="http://localhost:8000/docs" className="hover:text-gray-600">API Docs</a>
+          <Link to="/privacy" className="hover:text-gray-600">Privacy Policy</Link>
+          <Link to="/terms" className="hover:text-gray-600">Terms of Service</Link>
+          <a href="mailto:support@mavericinfotech.in" className="hover:text-gray-600">Contact</a>
         </div>
       </footer>
     </div>
