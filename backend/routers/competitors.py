@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
 from models.competitor import Competitor
+from models.competitor_history import CompetitorHistory
 from schemas.competitor import CompetitorCreate, CompetitorUpdate, CompetitorResponse
 from services.auth import get_current_user
 
@@ -46,9 +47,43 @@ async def update_competitor(competitor_id: str, payload: CompetitorUpdate, curre
     competitor = result.scalar_one_or_none()
     if not competitor:
         raise HTTPException(status_code=404, detail="Competitor not found")
+
+    old_rating = competitor.rating
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(competitor, field, value)
+
+    # Snapshot history whenever rating changes
+    if payload.rating is not None and payload.rating != old_rating:
+        db.add(CompetitorHistory(
+            tenant_id=current_user["tenant_id"],
+            competitor_id=competitor.id,
+            rating=competitor.rating,
+            review_count=competitor.review_count or 0,
+        ))
+
     return competitor
+
+
+@router.get("/{competitor_id}/history")
+async def competitor_history(
+    competitor_id: str,
+    days: int = 30,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from datetime import datetime, timedelta
+    since = datetime.utcnow() - timedelta(days=days)
+    result = await db.execute(
+        select(CompetitorHistory)
+        .where(
+            CompetitorHistory.competitor_id == competitor_id,
+            CompetitorHistory.tenant_id == current_user["tenant_id"],
+            CompetitorHistory.recorded_at >= since,
+        )
+        .order_by(CompetitorHistory.recorded_at.asc())
+    )
+    rows = result.scalars().all()
+    return [{"date": r.recorded_at.isoformat(), "rating": r.rating, "review_count": r.review_count} for r in rows]
 
 
 @router.delete("/{competitor_id}", status_code=204)

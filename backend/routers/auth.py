@@ -10,6 +10,7 @@ from schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse, Pas
 from services.auth import hash_password, verify_password, create_access_token, get_current_user
 from services.resend_email import send_email
 from services.firebase_auth import verify_firebase_token
+from models.fcm_token import FcmToken
 from config import get_settings
 from datetime import datetime, timedelta
 import uuid
@@ -213,3 +214,28 @@ async def firebase_login(payload: FirebaseLoginRequest, db: AsyncSession = Depen
 
     token = create_access_token({"sub": user.id, "tenant_id": user.tenant_id, "role": user.role, "email": user.email})
     return {"access_token": token, "token_type": "bearer"}
+
+
+class FcmTokenRequest(BaseModel):
+    token: str
+
+
+@router.post("/fcm-token", status_code=204)
+async def save_fcm_token(
+    payload: FcmTokenRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    existing = await db.execute(
+        select(FcmToken).where(
+            FcmToken.token == payload.token,
+            FcmToken.user_id == current_user["sub"],
+        )
+    )
+    if not existing.scalar_one_or_none():
+        db.add(FcmToken(
+            tenant_id=current_user["tenant_id"],
+            user_id=current_user["sub"],
+            token=payload.token,
+        ))
+        await db.flush()

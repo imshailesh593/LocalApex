@@ -21,6 +21,7 @@ import Register from './pages/Register'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import LandingPage from './pages/LandingPage'
+import WidgetEmbed from './pages/WidgetEmbed'
 import NotFound from './pages/NotFound'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/r/:slug" element={<PublicReview />} />
+            <Route path="/widget/:slug" element={<WidgetEmbed />} />
             <Route
               path="/"
               element={

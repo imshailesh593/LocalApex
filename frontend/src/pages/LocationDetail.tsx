@@ -224,6 +224,24 @@ export default function LocationDetail() {
               >
                 Download PNG
               </a>
+
+              {/* Embed snippet */}
+              <div className="w-full max-w-md border border-gray-200 rounded-xl p-4 bg-gray-50 text-left">
+                <p className="text-xs font-semibold text-gray-500 mb-2">Website embed snippet</p>
+                <code className="text-xs text-gray-700 break-all whitespace-pre-wrap block mb-3">
+                  {`<iframe src="${window.location.origin}/widget/${location.funnel_slug}" width="300" height="320" frameborder="0" style="border:none;border-radius:12px"></iframe>`}
+                </code>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      `<iframe src="${window.location.origin}/widget/${location.funnel_slug}" width="300" height="320" frameborder="0" style="border:none;border-radius:12px"></iframe>`
+                    )
+                  }}
+                  className="text-xs text-brand-600 hover:underline font-medium"
+                >
+                  Copy snippet
+                </button>
+              </div>
             </>
           ) : (
             <div className="text-center space-y-2">

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useCompetitors, useAddCompetitor, useDeleteCompetitor } from '../hooks/useCompetitors'
 import { useLocations } from '../hooks/useLocations'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { competitorsApi } from '../api/endpoints'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { competitorsApi, competitorHistoryApi } from '../api/endpoints'
 import Badge from '../components/ui/Badge'
+import RatingChart from '../components/ui/RatingChart'
 import type { Competitor } from '../types/api'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -19,6 +20,12 @@ export default function CompetitorAnalytics() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ current_rating: '', review_count: '', map_rank: '' })
   const [form, setForm] = useState({ competitor_name: '', location_id: '', track_keywords: '', competitor_place_id: '' })
+  const [historyId, setHistoryId] = useState<string | null>(null)
+  const { data: historyData = [] } = useQuery({
+    queryKey: ['competitor-history', historyId],
+    queryFn: () => competitorHistoryApi.get(historyId!).then(r => r.data),
+    enabled: !!historyId,
+  })
 
   const updateCompetitor = useMutation({
     mutationFn: ({ id, data }: { id: string; data: object }) =>
@@ -196,6 +203,9 @@ export default function CompetitorAnalytics() {
                         <button onClick={() => startEdit(c)} className="text-xs text-brand-600 hover:underline font-medium">
                           Update
                         </button>
+                        <button onClick={() => setHistoryId(c.id)} className="text-xs text-purple-600 hover:underline">
+                          History
+                        </button>
                         <button
                           onClick={() => { if (confirm(`Delete "${c.competitor_name}"?`)) deleteCompetitor.mutate(c.id) }}
                           className="text-xs text-red-500 hover:underline"
@@ -209,6 +219,29 @@ export default function CompetitorAnalytics() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Rating history modal */}
+      {historyId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Rating History</h3>
+                <p className="text-xs text-gray-400">
+                  {competitors.find(c => c.id === historyId)?.competitor_name} — last 30 days
+                </p>
+              </div>
+              <button onClick={() => setHistoryId(null)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+            <RatingChart data={historyData as { date: string; rating: number }[]} height={140} />
+            {(historyData as unknown[]).length === 0 && (
+              <p className="text-xs text-gray-400 mt-2">
+                No history yet. Update a competitor's rating to start tracking changes.
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

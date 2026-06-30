@@ -5,6 +5,7 @@ import Header from './Header'
 import OnboardingWizard from '../OnboardingWizard'
 import { useLocations } from '../../hooks/useLocations'
 import { requestFcmToken, onForegroundMessage } from '../../lib/firebase'
+import { firebaseAuthApi } from '../../api/endpoints'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -12,8 +13,11 @@ export default function Layout() {
   useEffect(() => {
     if (!('Notification' in window)) return
     if (Notification.permission === 'denied') return
-    Notification.requestPermission().then(perm => {
-      if (perm === 'granted') requestFcmToken()
+    Notification.requestPermission().then(async perm => {
+      if (perm === 'granted') {
+        const token = await requestFcmToken()
+        if (token) firebaseAuthApi.saveFcmToken(token).catch(() => {})
+      }
     })
     const unsub = onForegroundMessage((payload: unknown) => {
       const p = payload as { notification?: { title?: string; body?: string } }

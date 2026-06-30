@@ -126,4 +126,13 @@ export const billingApi = {
 
 export const firebaseAuthApi = {
   login: (id_token: string) => api.post('/auth/firebase-login', { id_token }),
+  saveFcmToken: (token: string) => api.post('/auth/fcm-token', { token }),
+}
+
+export const competitorHistoryApi = {
+  get: (id: string, days = 30) => api.get(`/competitors/${id}/history`, { params: { days } }),
+}
+
+export const widgetApi = {
+  data: (slug: string) => api.get(`/widget/data/${slug}`),
 }

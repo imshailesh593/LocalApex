@@ -13,6 +13,7 @@ from services.ai_responder import generate_review_response
 from services.notifications import push as push_notification
 from services.resend_email import send_email, review_notification_html, review_request_html
 from services.webhooks import fire_event
+from services.fcm import send_push
 from services.activity import log as activity_log
 from models.tenant import Tenant
 from config import get_settings
@@ -62,11 +63,10 @@ async def submit_public_review(funnel_slug: str, payload: PublicReviewCreate, db
     notif_email = tenant.notification_email if tenant else None
 
     if review.is_routed:
-        await push_notification(
-            db, location.tenant_id, "review_positive",
-            f"New {payload.rating}-star review from {reviewer}",
-            f"{stars} — {payload.comment or 'No comment'}"
-        )
+        title = f"New {payload.rating}-star review from {reviewer}"
+        body = f"{stars} — {payload.comment or 'No comment'}"
+        await push_notification(db, location.tenant_id, "review_positive", title, body)
+        await send_push(db, location.tenant_id, title, body, {"type": "review_positive"})
         if notif_email:
             await send_email(
                 notif_email,
@@ -74,11 +74,10 @@ async def submit_public_review(funnel_slug: str, payload: PublicReviewCreate, db
                 review_notification_html(business_name, reviewer, payload.rating, payload.comment or "", True),
             )
     else:
-        await push_notification(
-            db, location.tenant_id, "review_negative",
-            f"New {payload.rating}-star review needs attention",
-            f"{reviewer}: {payload.comment or 'No comment'}"
-        )
+        title = f"New {payload.rating}-star review needs attention"
+        body = f"{reviewer}: {payload.comment or 'No comment'}"
+        await push_notification(db, location.tenant_id, "review_negative", title, body)
+        await send_push(db, location.tenant_id, title, body, {"type": "review_negative"})
         if notif_email:
             await send_email(
                 notif_email,

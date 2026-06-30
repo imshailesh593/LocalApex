@@ -79,6 +79,28 @@ export default function Reviews() {
     },
   })
 
+  const bulkDelete = useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const id of ids) await reviewsApi.update(id, { is_deleted: true })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reviews'] })
+      setSelected(new Set())
+      toast.success('Reviews deleted')
+    },
+    onError: () => toast.error('Delete failed'),
+  })
+
+  const bulkMarkRead = useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const id of ids) await reviewsApi.update(id, { is_read: true })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reviews'] })
+      setSelected(new Set())
+    },
+  })
+
   const columns: Column<Review>[] = [
     {
       key: 'id',
@@ -302,20 +324,38 @@ export default function Reviews() {
       </div>
 
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 bg-brand-50 border border-brand-200 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-3 bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 flex-wrap">
           <span className="text-sm font-medium text-brand-700">{selected.size} selected</span>
+          <button
+            onClick={() => bulkMarkRead.mutate([...selected])}
+            disabled={bulkMarkRead.isPending}
+            className="text-sm border border-gray-300 bg-white text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            Mark Read
+          </button>
           <button
             onClick={() => bulkMarkResponded.mutate([...selected])}
             disabled={bulkMarkResponded.isPending}
             className="text-sm bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700 disabled:opacity-50"
           >
-            {bulkMarkResponded.isPending ? 'Updating…' : 'Mark as Responded'}
+            {bulkMarkResponded.isPending ? 'Updating…' : 'Mark Responded'}
+          </button>
+          <button
+            onClick={() => {
+              if (confirm(`Delete ${selected.size} review${selected.size !== 1 ? 's' : ''}?`)) {
+                bulkDelete.mutate([...selected])
+              }
+            }}
+            disabled={bulkDelete.isPending}
+            className="text-sm bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600 disabled:opacity-50"
+          >
+            {bulkDelete.isPending ? 'Deleting…' : 'Delete'}
           </button>
           <button
             onClick={() => setSelected(new Set())}
             className="text-sm text-gray-500 hover:text-gray-700 ml-auto"
           >
-            Clear selection
+            Clear
           </button>
         </div>
       )}
