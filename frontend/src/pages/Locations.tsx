@@ -3,6 +3,7 @@ import DataTable, { Column } from '../components/ui/DataTable'
 import NAPEditor from '../components/NAPEditor'
 import { useState, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { useToast } from '../context/ToastContext'
 import type { Location } from '../types/api'
@@ -43,7 +44,11 @@ export default function Locations() {
     {
       key: 'store_name',
       label: 'Store Name',
-      render: (val) => <span className="font-medium text-gray-900">{String(val)}</span>,
+      render: (val, row) => (
+        <Link to={`/locations/${row.id}`} className="font-medium text-brand-600 hover:underline">
+          {String(val)}
+        </Link>
+      ),
     },
     { key: 'address', label: 'Address' },
     { key: 'city', label: 'City' },

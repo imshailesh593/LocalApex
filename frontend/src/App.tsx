@@ -15,6 +15,7 @@ import ProfileSettings from './pages/ProfileSettings'
 import PlanUpgrade from './pages/PlanUpgrade'
 import Reports from './pages/Reports'
 import ActivityLog from './pages/ActivityLog'
+import LocationDetail from './pages/LocationDetail'
 import PublicReview from './pages/PublicReview'
 import Register from './pages/Register'
 import ForgotPassword from './pages/ForgotPassword'
@@ -52,6 +53,7 @@ export default function App() {
               <Route path="reviews" element={<Reviews />} />
               <Route path="competitors" element={<CompetitorAnalytics />} />
               <Route path="locations" element={<Locations />} />
+              <Route path="locations/:id" element={<LocationDetail />} />
               <Route path="citations" element={<Citations />} />
               <Route path="qa" element={<QAManager />} />
               <Route path="media" element={<MediaManager />} />

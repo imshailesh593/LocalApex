@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import api from '../api/client'
+import { useToast } from '../context/ToastContext'
 
 interface LocationRow {
   id: string
@@ -45,6 +46,7 @@ const ratingColor = (r: number | null) => {
 
 export default function Reports() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const toast = useToast()
 
   const { data: overview = [] } = useQuery<LocationRow[]>({
     queryKey: ['reports-overview'],
@@ -57,18 +59,36 @@ export default function Reports() {
     enabled: !!selectedId,
   })
 
+  const sendDigest = useMutation({
+    mutationFn: () => api.post('/reports/send-digest').then(r => r.data),
+    onSuccess: (data: { to: string }) => toast.success(`Digest sent to ${data.to}`),
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { detail?: string } } }
+      toast.error(e?.response?.data?.detail ?? 'Failed to send digest')
+    },
+  })
+
   const print = () => window.print()
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-xl font-bold text-gray-900">Reports</h1>
-        <button
-          onClick={print}
-          className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-        >
-          Print / Save PDF
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => sendDigest.mutate()}
+            disabled={sendDigest.isPending}
+            className="border border-brand-600 text-brand-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-50 disabled:opacity-60"
+          >
+            {sendDigest.isPending ? 'Sending…' : '📧 Send weekly digest'}
+          </button>
+          <button
+            onClick={print}
+            className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            Print / Save PDF
+          </button>
+        </div>
       </div>
 
       {/* Overview table */}

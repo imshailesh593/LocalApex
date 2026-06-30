@@ -1,6 +1,8 @@
 import csv
 import io
+import qrcode
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
@@ -8,6 +10,9 @@ from models.location import Location
 from schemas.location import LocationCreate, LocationUpdate, LocationResponse
 from services.auth import get_current_user
 from services.activity import log as activity_log
+from config import get_settings
+
+settings = get_settings()
 
 router = APIRouter(prefix="/locations", tags=["Locations"])
 
@@ -52,6 +57,33 @@ async def update_location(location_id: str, payload: LocationUpdate, current_use
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(location, field, value)
     return location
+
+
+@router.get("/{location_id}/qrcode")
+async def get_qr_code(location_id: str, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Location).where(Location.id == location_id, Location.tenant_id == current_user["tenant_id"])
+    )
+    location = result.scalar_one_or_none()
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+    if not location.funnel_slug:
+        raise HTTPException(status_code=400, detail="This location has no funnel slug set")
+
+    url = f"{settings.frontend_url}/r/{location.funnel_slug}"
+    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#1d4ed8", back_color="white")
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="image/png",
+        headers={"Content-Disposition": f'inline; filename="qr-{location.funnel_slug}.png"'},
+    )
 
 
 @router.post("/import-csv")
