@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useInsights, useRecordInsight, useInsightTimeseries, useImportInsightCsv } from '../hooks/useInsights'
 import { useReviews } from '../hooks/useReviews'
 import { useLocations } from '../hooks/useLocations'
 import StatCard from '../components/ui/StatCard'
 import type { InsightSummary } from '../types/api'
+import { reviewsApi } from '../api/endpoints'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
-  LineChart, Line, CartesianGrid,
+  LineChart, Line, CartesianGrid, AreaChart, Area,
 } from 'recharts'
 
 const METRICS = ['views', 'searches', 'clicks', 'calls', 'directions', 'bookings'] as const
@@ -28,7 +30,18 @@ export default function Dashboard() {
   const recordInsight = useRecordInsight()
   const importCsv = useImportInsightCsv()
 
-  const [tab, setTab] = useState<'overview' | 'trends'>('overview')
+  const [tab, setTab] = useState<'overview' | 'trends' | 'reviews'>('overview')
+
+  const { data: reviewTrend = [] } = useQuery<{ date: string; count: number; avg_rating: number | null }[]>({
+    queryKey: ['review-trend'],
+    queryFn: () => reviewsApi.trend(30).then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const { data: sentimentSummary } = useQuery<{ positive: number; neutral: number; negative: number }>({
+    queryKey: ['sentiment-summary'],
+    queryFn: () => reviewsApi.sentimentSummary().then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
   const [trendMetric, setTrendMetric] = useState<Metric>('views')
   const [dateFrom, setDateFrom] = useState(thirtyDaysAgo)
   const [dateTo, setDateTo] = useState(today)
@@ -249,7 +262,7 @@ export default function Dashboard() {
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            {(['overview', 'trends'] as const).map(t => (
+            {(['overview', 'trends', 'reviews'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize
                   ${tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -273,7 +286,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {tab === 'overview' ? (
+        {tab === 'overview' && (
           chartData.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-gray-400 space-y-2">
               <p className="text-sm">No insight data yet.</p>
@@ -291,7 +304,8 @@ export default function Dashboard() {
               </BarChart>
             </ResponsiveContainer>
           )
-        ) : (
+        )}
+        {tab === 'trends' && (
           !nonZeroTrend ? (
             <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
               No data for {trendMetric} in this date range.
@@ -311,6 +325,57 @@ export default function Dashboard() {
               </LineChart>
             </ResponsiveContainer>
           )
+        )}
+        {tab === 'reviews' && (
+          <div className="space-y-6">
+            {reviewTrend.length === 0 ? (
+              <div className="flex items-center justify-center h-40 text-gray-400 text-sm">No review data yet.</div>
+            ) : (
+              <>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Reviews per day (last 30 days)</p>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={reviewTrend}>
+                      <defs>
+                        <linearGradient id="reviewGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#2563eb" stopOpacity={0.15} />
+                          <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={v => String(v).slice(5)} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <Tooltip formatter={(v: number) => [v, 'Reviews']} labelFormatter={l => `Date: ${l}`} />
+                      <Area type="monotone" dataKey="count" stroke="#2563eb" fill="url(#reviewGrad)" strokeWidth={2} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                {sentimentSummary && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Sentiment breakdown</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { key: 'positive', label: 'Positive', color: 'text-green-600 bg-green-50 border-green-100' },
+                        { key: 'neutral', label: 'Neutral', color: 'text-gray-600 bg-gray-50 border-gray-100' },
+                        { key: 'negative', label: 'Negative', color: 'text-red-500 bg-red-50 border-red-100' },
+                      ].map(({ key, label, color }) => {
+                        const n = sentimentSummary[key as keyof typeof sentimentSummary]
+                        const total = Object.values(sentimentSummary).reduce((a, b) => a + b, 0)
+                        const pct = total ? Math.round((n / total) * 100) : 0
+                        return (
+                          <div key={key} className={`border rounded-xl p-4 text-center ${color}`}>
+                            <p className="text-3xl font-bold">{n}</p>
+                            <p className="text-xs font-semibold mt-1">{label}</p>
+                            <p className="text-xs opacity-70">{pct}% of total</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
       </div>
 

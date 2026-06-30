@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useReviews, useGenerateReviewResponse, useReviewStats } from '../hooks/useReviews'
 import { useLocations } from '../hooks/useLocations'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { reviewsApi, templatesApi } from '../api/endpoints'
+import { reviewsApi, templatesApi, authApi } from '../api/endpoints'
 import { downloadCsv } from '../utils/downloadCsv'
 import { useToast } from '../context/ToastContext'
 import DataTable, { Column } from '../components/ui/DataTable'
@@ -28,6 +28,7 @@ export default function Reviews() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [notesReviewId, setNotesReviewId] = useState<string | null>(null)
   const [newNote, setNewNote] = useState('')
+  const [assignReviewId, setAssignReviewId] = useState<string | null>(null)
   const PER_PAGE = 20
 
   const { data: stats } = useReviewStats()
@@ -119,6 +120,22 @@ export default function Reviews() {
   const deleteNote = useMutation({
     mutationFn: (noteId: string) => reviewsApi.deleteNote(notesReviewId!, noteId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['review-notes', notesReviewId] }),
+  })
+
+  const { data: teamMembers = [] } = useQuery<{ id: string; name: string; email: string }[]>({
+    queryKey: ['users'],
+    queryFn: () => authApi.listUsers().then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const assignReview = useMutation({
+    mutationFn: ({ reviewId, userId }: { reviewId: string; userId: string | null }) =>
+      reviewsApi.assign(reviewId, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reviews'] })
+      setAssignReviewId(null)
+      toast.success('Review assigned')
+    },
   })
 
   const columns: Column<Review>[] = [
@@ -235,6 +252,24 @@ export default function Reviews() {
             >
               Notes
             </button>
+            <button
+              onClick={() => setAssignReviewId(assignReviewId === String(val) ? null : String(val))}
+              className="text-xs text-purple-500 hover:text-purple-700"
+            >
+              {row.assigned_to ? 'Reassign' : 'Assign'}
+            </button>
+            {assignReviewId === String(val) && (
+              <div className="mt-1 flex items-center gap-2">
+                <select
+                  defaultValue={row.assigned_to ?? ''}
+                  onChange={e => assignReview.mutate({ reviewId: String(val), userId: e.target.value || null })}
+                  className="text-xs border border-gray-200 rounded px-2 py-1"
+                >
+                  <option value="">Unassign</option>
+                  {teamMembers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+            )}
           </div>
           {row.ai_response && (
             <div className="mt-1">

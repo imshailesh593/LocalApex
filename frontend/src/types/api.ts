@@ -43,6 +43,9 @@ export interface Review extends BaseRecord {
   ai_response: string | null
   source: string
   sentiment: 'positive' | 'neutral' | 'negative' | null
+  assigned_to: string | null
+  assigned_at: string | null
+  is_read: boolean
 }
 
 export interface Citation extends BaseRecord {

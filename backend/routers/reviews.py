@@ -112,6 +112,41 @@ async def submit_public_review(funnel_slug: str, payload: PublicReviewCreate, db
     )
 
 
+@router.get("/trend")
+async def review_trend(days: int = 30, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import cast, Date as SADate, literal_column
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await db.execute(
+        select(
+            cast(ReviewFunnel.created_at, SADate).label("day"),
+            func.count(ReviewFunnel.id).label("count"),
+            func.avg(ReviewFunnel.rating).label("avg_rating"),
+        ).where(
+            ReviewFunnel.tenant_id == current_user["tenant_id"],
+            ReviewFunnel.is_deleted == False,
+            ReviewFunnel.created_at >= since,
+        ).group_by(literal_column("day")).order_by(literal_column("day"))
+    )
+    rows = result.all()
+    return [{"date": str(r.day), "count": r.count, "avg_rating": round(float(r.avg_rating), 2) if r.avg_rating else None} for r in rows]
+
+
+@router.get("/sentiment-summary")
+async def sentiment_summary(current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ReviewFunnel.sentiment, func.count(ReviewFunnel.id).label("n"))
+        .where(ReviewFunnel.tenant_id == current_user["tenant_id"], ReviewFunnel.is_deleted == False)
+        .group_by(ReviewFunnel.sentiment)
+    )
+    rows = result.all()
+    totals = {"positive": 0, "neutral": 0, "negative": 0}
+    for r in rows:
+        key = r.sentiment or "neutral"
+        totals[key] = totals.get(key, 0) + r.n
+    return totals
+
+
 @router.get("/stats")
 async def review_stats(current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     base = select(func.count(ReviewFunnel.id)).where(
@@ -273,7 +308,37 @@ async def update_review(review_id: str, payload: ReviewUpdate, current_user=Depe
         raise HTTPException(status_code=404, detail="Review not found")
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(review, field, value)
+    await db.commit()
+    await db.refresh(review)
     return review
+
+
+# ── Review Assignment ────────────────────────────────────────────────────────
+
+class AssignPayload(BaseModel):
+    user_id: str | None = None  # None = unassign
+
+
+@router.post("/{review_id}/assign")
+async def assign_review(review_id: str, body: AssignPayload, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    from datetime import datetime, timezone
+    result = await db.execute(
+        select(ReviewFunnel).where(ReviewFunnel.id == review_id, ReviewFunnel.tenant_id == current_user["tenant_id"])
+    )
+    review = result.scalar_one_or_none()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    review.assigned_to = body.user_id
+    review.assigned_at = datetime.now(timezone.utc) if body.user_id else None
+    await db.commit()
+    await db.refresh(review)
+    assignee = None
+    if body.user_id:
+        ur = await db.execute(select(User).where(User.id == body.user_id, User.tenant_id == current_user["tenant_id"]))
+        u = ur.scalar_one_or_none()
+        if u:
+            assignee = {"id": u.id, "name": u.name, "email": u.email}
+    return {"assigned_to": review.assigned_to, "assigned_at": review.assigned_at, "assignee": assignee}
 
 
 # ── Review Notes ────────────────────────────────────────────────────────────

@@ -40,6 +40,9 @@ export const reviewsApi = {
   addNote: (reviewId: string, body: string) => api.post(`/reviews/${reviewId}/notes`, { body }),
   deleteNote: (reviewId: string, noteId: string) => api.delete(`/reviews/${reviewId}/notes/${noteId}`),
   healthScore: (locationId: string) => api.get(`/reviews/health/${locationId}`),
+  trend: (days = 30) => api.get('/reviews/trend', { params: { days } }),
+  sentimentSummary: () => api.get('/reviews/sentiment-summary'),
+  assign: (id: string, userId: string | null) => api.post(`/reviews/${id}/assign`, { user_id: userId }),
 }
 
 export const competitorsApi = {
@@ -154,4 +157,9 @@ export const reviewsImportApi = {
 
 export const widgetApi = {
   data: (slug: string) => api.get(`/widget/data/${slug}`),
+}
+
+export const notificationPrefsApi = {
+  get: () => api.get('/notification-prefs'),
+  update: (data: object) => api.patch('/notification-prefs', data),
 }

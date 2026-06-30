@@ -1,6 +1,7 @@
-from sqlalchemy import String, Text, Integer, Boolean, Enum as SAEnum
+from sqlalchemy import String, Text, Integer, Boolean, Enum as SAEnum, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from models.base import TenantBase
+from datetime import datetime
 import enum
 
 
@@ -25,3 +26,5 @@ class ReviewFunnel(TenantBase):
     google_review_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(String(50), default="funnel")
     sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    assigned_to: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

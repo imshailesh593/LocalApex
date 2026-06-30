@@ -1,11 +1,71 @@
 import { useTenant } from '../context/TenantContext'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { tenantApi, authApi, templatesApi, webhooksApi } from '../api/endpoints'
+import { tenantApi, authApi, templatesApi, webhooksApi, notificationPrefsApi } from '../api/endpoints'
 import { useToast } from '../context/ToastContext'
 import type { AuthUser, ResponseTemplate } from '../types/api'
 
 interface Webhook { id: string; url: string; secret: string; events: string; is_active: boolean }
+
+interface NotifPrefs {
+  email_review_new: boolean
+  email_review_negative: boolean
+  email_weekly_digest: boolean
+  push_review_new: boolean
+  push_review_negative: boolean
+}
+
+function NotificationPrefsSection() {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const { data: prefs } = useQuery<NotifPrefs>({
+    queryKey: ['notif-prefs'],
+    queryFn: () => notificationPrefsApi.get().then(r => r.data),
+  })
+  const update = useMutation({
+    mutationFn: (data: Partial<NotifPrefs>) => notificationPrefsApi.update(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['notif-prefs'] }); toast.success('Preferences saved') },
+  })
+
+  if (!prefs) return null
+
+  const toggle = (key: keyof NotifPrefs) => update.mutate({ ...prefs, [key]: !prefs[key] })
+
+  const rows: { key: keyof NotifPrefs; label: string; channel: 'Email' | 'Push' }[] = [
+    { key: 'email_review_new', label: 'New review received', channel: 'Email' },
+    { key: 'email_review_negative', label: 'Negative review (< 3 stars)', channel: 'Email' },
+    { key: 'email_weekly_digest', label: 'Weekly digest', channel: 'Email' },
+    { key: 'push_review_new', label: 'New review received', channel: 'Push' },
+    { key: 'push_review_negative', label: 'Negative review (< 3 stars)', channel: 'Push' },
+  ]
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-gray-700">Notification Preferences</h2>
+        <p className="text-xs text-gray-400 mt-0.5">Choose which events trigger email and push notifications.</p>
+      </div>
+      <div className="divide-y divide-gray-100">
+        {rows.map(({ key, label, channel }) => (
+          <div key={key} className="flex items-center justify-between py-2.5">
+            <div>
+              <span className="text-sm text-gray-700">{label}</span>
+              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${
+                channel === 'Email' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+              }`}>{channel}</span>
+            </div>
+            <button
+              onClick={() => toggle(key)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${prefs[key] ? 'bg-brand-600' : 'bg-gray-200'}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${prefs[key] ? 'translate-x-4' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export default function ProfileSettings() {
   const { tenant, refresh } = useTenant()
@@ -544,6 +604,9 @@ export default function ProfileSettings() {
           {regenerateApiKey.isPending ? 'Regenerating…' : 'Regenerate key'}
         </button>
       </div>
+
+      {/* Notification Preferences */}
+      <NotificationPrefsSection />
 
       {/* Data & Privacy */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
