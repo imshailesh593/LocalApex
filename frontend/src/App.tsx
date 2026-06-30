@@ -12,7 +12,7 @@ import Citations from './pages/Citations'
 import QAManager from './pages/QAManager'
 import MediaManager from './pages/MediaManager'
 import ProfileSettings from './pages/ProfileSettings'
-import PlanUpgrade from './pages/PlanUpgrade'
+import PlanPage from './pages/PlanPage'
 import Reports from './pages/Reports'
 import ActivityLog from './pages/ActivityLog'
 import LocationDetail from './pages/LocationDetail'
@@ -58,7 +58,7 @@ export default function App() {
               <Route path="qa" element={<QAManager />} />
               <Route path="media" element={<MediaManager />} />
               <Route path="settings" element={<ProfileSettings />} />
-              <Route path="plan" element={<PlanUpgrade />} />
+              <Route path="plan" element={<PlanPage />} />
               <Route path="reports" element={<Reports />} />
               <Route path="activity" element={<ActivityLog />} />
             </Route>

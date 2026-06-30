@@ -1,12 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import OnboardingWizard from '../OnboardingWizard'
 import { useLocations } from '../../hooks/useLocations'
+import { requestFcmToken, onForegroundMessage } from '../../lib/firebase'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    if (!('Notification' in window)) return
+    if (Notification.permission === 'denied') return
+    Notification.requestPermission().then(perm => {
+      if (perm === 'granted') requestFcmToken()
+    })
+    const unsub = onForegroundMessage((payload: unknown) => {
+      const p = payload as { notification?: { title?: string; body?: string } }
+      if (p.notification?.title) {
+        new Notification(p.notification.title, { body: p.notification.body ?? '' })
+      }
+    })
+    return () => { if (typeof unsub === 'function') unsub() }
+  }, [])
   const { data: locations } = useLocations()
   const [wizardDismissed, setWizardDismissed] = useState(
     () => localStorage.getItem('onboarding_done') === '1'

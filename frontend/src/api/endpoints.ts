@@ -112,3 +112,18 @@ export const citationsImportApi = {
     return api.post('/citations/import-csv', fd)
   },
 }
+
+export const billingApi = {
+  plans: () => api.get('/billing/plans'),
+  createSubscription: (plan_key: string) => api.post('/billing/create-subscription', { plan_key }),
+  verifyPayment: (data: {
+    razorpay_payment_id: string
+    razorpay_subscription_id: string
+    razorpay_signature: string
+    plan_key: string
+  }) => api.post('/billing/verify-payment', data),
+}
+
+export const firebaseAuthApi = {
+  login: (id_token: string) => api.post('/auth/firebase-login', { id_token }),
+}

@@ -17,3 +17,4 @@ class User(TenantBase):
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.admin)
+    firebase_uid: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)

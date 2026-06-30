@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     smtp_from_email: str = ""
     smtp_from_name: str = "LocalApex"
     frontend_url: str = "http://localhost:5173"
+    # Razorpay
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    razorpay_webhook_secret: str = ""
+    # Firebase
+    firebase_service_account_json: str = ""
+    firebase_web_api_key: str = ""
+    # Resend
+    resend_api_key: str = ""
+    resend_from_email: str = "noreply@localapex.dev"
 
     @property
     def origins_list(self) -> list[str]:

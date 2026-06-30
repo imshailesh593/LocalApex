@@ -9,6 +9,7 @@ from models.password_reset import PasswordResetToken
 from schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse, PasswordChange, UserInvite
 from services.auth import hash_password, verify_password, create_access_token, get_current_user
 from services.email import send_email
+from services.firebase_auth import verify_firebase_token
 from config import get_settings
 from datetime import datetime, timedelta
 import uuid
@@ -166,3 +167,49 @@ async def remove_user(user_id: str, current_user=Depends(get_current_user), db: 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.is_deleted = True
+
+
+class FirebaseLoginRequest(BaseModel):
+    id_token: str
+
+
+@router.post("/firebase-login", response_model=TokenResponse)
+async def firebase_login(payload: FirebaseLoginRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        decoded = verify_firebase_token(payload.id_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid Firebase token")
+
+    firebase_uid = decoded.get("uid")
+    email = decoded.get("email", "")
+    display_name = decoded.get("name", "") or email.split("@")[0]
+
+    result = await db.execute(
+        select(User).where(User.email == email, User.is_deleted == False)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # Auto-register: create tenant + user
+        tenant = Tenant(business_name=display_name)
+        db.add(tenant)
+        await db.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            name=display_name,
+            email=email,
+            password_hash=hash_password(uuid.uuid4().hex),  # random unusable password
+            role="owner",
+            firebase_uid=firebase_uid,
+        )
+        db.add(user)
+        await db.flush()
+        await db.refresh(user)
+    else:
+        if not user.firebase_uid:
+            user.firebase_uid = firebase_uid
+            await db.flush()
+
+    token = create_access_token({"sub": user.id, "tenant_id": user.tenant_id, "role": user.role, "email": user.email})
+    return {"access_token": token, "token_type": "bearer"}
