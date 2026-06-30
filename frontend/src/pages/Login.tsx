@@ -30,7 +30,7 @@ export default function Login() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-brand-700">LocalApex</h1>
+          <Link to="/home" className="text-2xl font-bold text-brand-700 hover:text-brand-800">LocalApex</Link>
           <p className="text-sm text-gray-500 mt-1">Sign in to your dashboard</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">

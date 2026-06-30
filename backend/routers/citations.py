@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from database import get_db
@@ -6,6 +7,7 @@ from models.citation import Citation, CitationStatus
 from models.location import Location
 from schemas.citation import CitationCreate, CitationResponse
 from services.auth import get_current_user
+import csv, io
 
 router = APIRouter(prefix="/citations", tags=["Citations"])
 
@@ -28,6 +30,31 @@ async def list_citations(
     query = query.order_by(Citation.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.get("/export")
+async def export_citations(current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Citation).where(
+            Citation.tenant_id == current_user["tenant_id"],
+            Citation.is_deleted == False,
+        ).order_by(Citation.created_at.desc())
+    )
+    citations = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['id', 'platform', 'listed_name', 'listed_address', 'listed_phone',
+                     'listed_website', 'status', 'nap_issues', 'profile_url', 'created_at'])
+    for c in citations:
+        writer.writerow([c.id, c.platform, c.listed_name, c.listed_address, c.listed_phone,
+                         c.listed_website, c.status, c.nap_issues, c.profile_url, c.created_at])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type='text/csv',
+        headers={'Content-Disposition': 'attachment; filename="citations.csv"'},
+    )
 
 
 @router.post("", response_model=CitationResponse, status_code=201)

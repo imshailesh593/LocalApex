@@ -19,11 +19,12 @@ import PublicReview from './pages/PublicReview'
 import Register from './pages/Register'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
+import LandingPage from './pages/LandingPage'
 import NotFound from './pages/NotFound'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
-  return token ? <>{children}</> : <Navigate to="/login" replace />
+  return token ? <>{children}</> : <Navigate to="/home" replace />
 }
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
         <ToastProvider>
         <TenantProvider>
           <Routes>
+            <Route path="/home" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />

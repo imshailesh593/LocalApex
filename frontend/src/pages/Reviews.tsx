@@ -3,6 +3,8 @@ import { useReviews, useGenerateReviewResponse, useReviewStats } from '../hooks/
 import { useLocations } from '../hooks/useLocations'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { reviewsApi, templatesApi } from '../api/endpoints'
+import { downloadCsv } from '../utils/downloadCsv'
+import { useToast } from '../context/ToastContext'
 import DataTable, { Column } from '../components/ui/DataTable'
 import Pagination from '../components/ui/Pagination'
 import Badge from '../components/ui/Badge'
@@ -206,25 +208,34 @@ export default function Reviews() {
     },
   ]
 
+  const toast = useToast()
   const routed = reviews.filter(r => r.is_routed).length
   const suppressed = reviews.filter(r => !r.is_routed).length
   const totalReviews = stats?.total ?? 0
 
-  const exportCsv = () => {
-    const header = 'Reviewer,Email,Rating,Status,Comment,AI Response,Date'
-    const rows = reviews.map(r =>
-      [r.reviewer_name ?? '', r.reviewer_email ?? '', r.rating, r.status,
-        `"${(r.comment ?? '').replace(/"/g, '""')}"`,
-        `"${(r.ai_response ?? '').replace(/"/g, '""')}"`,
-        r.created_at.slice(0, 10),
-      ].join(',')
-    )
-    const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `reviews-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(a.href)
+  const [showRequestModal, setShowRequestModal] = useState(false)
+  const [requestForm, setRequestForm] = useState({ location_id: '', emails: '', custom_message: '' })
+  const [requestSending, setRequestSending] = useState(false)
+
+  const handleSendRequests = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const emails = requestForm.emails.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+    if (!emails.length) { toast.error('Enter at least one email'); return }
+    setRequestSending(true)
+    try {
+      const res = await reviewsApi.requestReviews({
+        location_id: requestForm.location_id,
+        emails,
+        custom_message: requestForm.custom_message,
+      })
+      toast.success(`Sent ${res.data.sent} review request${res.data.sent !== 1 ? 's' : ''}`)
+      setShowRequestModal(false)
+      setRequestForm({ location_id: '', emails: '', custom_message: '' })
+    } catch {
+      toast.error('Failed to send requests')
+    } finally {
+      setRequestSending(false)
+    }
   }
 
   return (
@@ -235,11 +246,18 @@ export default function Reviews() {
           <span className="text-green-600 font-medium">{routed} routed to Google</span>
           <span className="text-gray-400">·</span>
           <span className="text-red-500 font-medium">{suppressed} suppressed</span>
-          {reviews.length > 0 && (
-            <button onClick={exportCsv} className="ml-2 border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50">
-              Export CSV
-            </button>
-          )}
+          <button
+            onClick={() => downloadCsv('/reviews/export', `reviews-${new Date().toISOString().slice(0,10)}.csv`).catch(() => toast.error('Export failed'))}
+            className="border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50"
+          >
+            Export CSV
+          </button>
+          <button
+            onClick={() => setShowRequestModal(true)}
+            className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-brand-700"
+          >
+            Request Reviews
+          </button>
         </div>
       </div>
 
@@ -309,6 +327,75 @@ export default function Reviews() {
         total={totalReviews}
         onChange={p => setPage(p)}
       />
+
+      {/* Request Reviews modal */}
+      {showRequestModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900">Request Reviews</h2>
+              <button onClick={() => setShowRequestModal(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+            <p className="text-sm text-gray-500">
+              Send a personalised email to your customers with a link to your review funnel.
+            </p>
+            <form onSubmit={handleSendRequests} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Location</label>
+                <select
+                  value={requestForm.location_id}
+                  onChange={e => setRequestForm(f => ({ ...f, location_id: e.target.value }))}
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">Select location…</option>
+                  {locations.filter(l => l.funnel_slug).map(l => (
+                    <option key={l.id} value={l.id}>{l.store_name} (/r/{l.funnel_slug})</option>
+                  ))}
+                </select>
+                {locations.filter(l => l.funnel_slug).length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">Set a funnel slug on a location first.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Customer emails <span className="text-gray-400">(comma or line separated)</span>
+                </label>
+                <textarea
+                  value={requestForm.emails}
+                  onChange={e => setRequestForm(f => ({ ...f, emails: e.target.value }))}
+                  placeholder="customer1@example.com&#10;customer2@example.com"
+                  rows={4}
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Custom message <span className="text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={requestForm.custom_message}
+                  onChange={e => setRequestForm(f => ({ ...f, custom_message: e.target.value }))}
+                  placeholder="We'd love to hear about your visit!"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setShowRequestModal(false)} className="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+                <button
+                  type="submit"
+                  disabled={requestSending}
+                  className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
+                >
+                  {requestSending ? 'Sending…' : 'Send emails'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

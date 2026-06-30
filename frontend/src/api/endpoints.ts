@@ -34,6 +34,8 @@ export const reviewsApi = {
   submit: (data: object) => api.post('/reviews', data),
   update: (id: string, data: object) => api.patch(`/reviews/${id}`, data),
   generateResponse: (id: string) => api.post(`/reviews/${id}/generate-response`),
+  requestReviews: (data: { location_id: string; emails: string[]; custom_message?: string }) =>
+    api.post('/reviews/request-reviews', data),
 }
 
 export const competitorsApi = {

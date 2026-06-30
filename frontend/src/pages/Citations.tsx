@@ -4,6 +4,8 @@ import { citationsApi } from '../api/endpoints'
 import { useLocations } from '../hooks/useLocations'
 import Badge from '../components/ui/Badge'
 import Pagination from '../components/ui/Pagination'
+import { downloadCsv } from '../utils/downloadCsv'
+import { useToast } from '../context/ToastContext'
 import type { Citation } from '../types/api'
 
 type BadgeVariant = 'green' | 'red' | 'yellow' | 'blue' | 'gray'
@@ -30,6 +32,7 @@ const PER_PAGE = 20
 export default function Citations() {
   const [page, setPage] = useState(1)
   const qc = useQueryClient()
+  const toast = useToast()
   const { data: citations = [], isLoading } = useQuery<Citation[]>({
     queryKey: ['citations', page],
     queryFn: () => citationsApi.list({ page, per_page: PER_PAGE }).then(r => r.data),
@@ -86,12 +89,20 @@ export default function Citations() {
           {issues > 0 && <span className="text-sm text-red-500 font-medium">{issues} issues</span>}
           {unchecked > 0 && <span className="text-sm text-gray-400">{unchecked} unchecked</span>}
           {citations.length > 0 && (
-            <button
-              onClick={checkAllNAP}
-              className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-            >
-              Check All NAP
-            </button>
+            <>
+              <button
+                onClick={() => downloadCsv('/citations/export', `citations-${new Date().toISOString().slice(0,10)}.csv`).catch(() => toast.error('Export failed'))}
+                className="border border-gray-300 text-gray-600 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+              >
+                Export CSV
+              </button>
+              <button
+                onClick={checkAllNAP}
+                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+              >
+                Check All NAP
+              </button>
+            </>
           )}
           <button
             onClick={() => { setShowPresets(!showPresets); setShowForm(false) }}

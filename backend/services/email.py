@@ -32,6 +32,31 @@ async def send_email(to: str, subject: str, html: str):
         pass
 
 
+def review_request_html(business_name: str, funnel_url: str, custom_message: str = "") -> str:
+    message = custom_message or f"We'd love to hear about your recent experience at {business_name}. It only takes 30 seconds!"
+    return f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+      <div style="background:#1d4ed8;padding:20px 24px">
+        <h1 style="color:#fff;margin:0;font-size:18px">{business_name}</h1>
+      </div>
+      <div style="padding:28px 24px">
+        <p style="font-size:28px;margin:0 0 12px;text-align:center">⭐⭐⭐⭐⭐</p>
+        <p style="font-size:16px;color:#111;margin:0 0 20px;text-align:center;font-weight:600">How was your experience?</p>
+        <p style="font-size:14px;color:#6b7280;margin:0 0 24px;text-align:center">{message}</p>
+        <div style="text-align:center">
+          <a href="{funnel_url}"
+             style="display:inline-block;background:#1d4ed8;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700">
+            Leave a Review →
+          </a>
+        </div>
+      </div>
+      <div style="padding:16px 24px;border-top:1px solid #f3f4f6;font-size:12px;color:#9ca3af;text-align:center">
+        Sent by {business_name} via LocalApex
+      </div>
+    </div>
+    """
+
+
 def review_notification_html(business_name: str, reviewer: str, rating: int, comment: str, is_routed: bool) -> str:
     stars = "⭐" * rating
     color = "#16a34a" if is_routed else "#dc2626"

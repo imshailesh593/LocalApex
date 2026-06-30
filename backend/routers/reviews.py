@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from pydantic import BaseModel
 from database import get_db
 from models.review import ReviewFunnel
 from models.location import Location
@@ -9,10 +11,20 @@ from services.auth import get_current_user
 from services.review_funnel import process_review
 from services.ai_responder import generate_review_response
 from services.notifications import push as push_notification
-from services.email import send_email, review_notification_html
+from services.email import send_email, review_notification_html, review_request_html
 from services.webhooks import fire_event
 from services.activity import log as activity_log
 from models.tenant import Tenant
+from config import get_settings
+import csv, io
+
+settings = get_settings()
+
+
+class ReviewRequestPayload(BaseModel):
+    location_id: str
+    emails: list[str]
+    custom_message: str = ""
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -178,6 +190,62 @@ async def generate_ai_response(review_id: str, current_user=Depends(get_current_
     response_text = await generate_review_response(review.comment or "", review.rating, business_name)
     review.ai_response = response_text
     return {"ai_response": response_text}
+
+
+@router.get("/export")
+async def export_reviews(current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ReviewFunnel).where(
+            ReviewFunnel.tenant_id == current_user["tenant_id"],
+            ReviewFunnel.is_deleted == False,
+        ).order_by(ReviewFunnel.created_at.desc())
+    )
+    reviews = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['id', 'reviewer_name', 'reviewer_email', 'rating', 'comment',
+                     'is_routed', 'status', 'ai_response', 'source', 'created_at'])
+    for r in reviews:
+        writer.writerow([r.id, r.reviewer_name, r.reviewer_email, r.rating, r.comment,
+                         r.is_routed, r.status, r.ai_response, r.source, r.created_at])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type='text/csv',
+        headers={'Content-Disposition': 'attachment; filename="reviews.csv"'},
+    )
+
+
+@router.post("/request-reviews")
+async def request_reviews(
+    payload: ReviewRequestPayload,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Location).where(Location.id == payload.location_id, Location.tenant_id == current_user["tenant_id"])
+    )
+    location = result.scalar_one_or_none()
+    if not location or not location.funnel_slug:
+        raise HTTPException(status_code=400, detail="Location not found or funnel slug not configured")
+
+    funnel_url = f"{settings.frontend_url}/r/{location.funnel_slug}"
+    sent = 0
+    for raw_email in payload.emails[:200]:
+        email = raw_email.strip()
+        if not email:
+            continue
+        html = review_request_html(location.store_name, funnel_url, payload.custom_message)
+        await send_email(email, f"How was your experience at {location.store_name}?", html)
+        sent += 1
+
+    await activity_log(
+        db, current_user["tenant_id"],
+        f"Sent {sent} review request(s) for {location.store_name}",
+        "location", location.store_name, current_user["sub"],
+    )
+    return {"sent": sent}
 
 
 @router.patch("/{review_id}", response_model=ReviewResponse)
