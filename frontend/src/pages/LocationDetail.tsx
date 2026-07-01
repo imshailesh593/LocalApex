@@ -240,6 +240,26 @@ export default function LocationDetail() {
         </div>
       )}
 
+      {/* Google Business Profile management hub */}
+      {tab === 'overview' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-0">
+          {[
+            { to: `/locations/${id}/reviews`, icon: '⭐', title: 'Google Reviews', desc: 'Sync, view & reply to real Google reviews' },
+            { to: `/locations/${id}/photos`, icon: '🖼️', title: 'Photos', desc: 'Upload & manage photos on your GBP listing' },
+            { to: `/locations/${id}/profile`, icon: '✏️', title: 'Profile & SEO', desc: 'Edit hours, description, categories & labels' },
+          ].map(card => (
+            <Link key={card.to} to={card.to}
+              className="bg-white rounded-xl border border-gray-200 p-4 hover:border-brand-300 hover:shadow-sm transition-all flex items-start gap-3">
+              <span className="text-2xl mt-0.5">{card.icon}</span>
+              <div>
+                <p className="font-semibold text-gray-800 text-sm">{card.title}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{card.desc}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+
       {/* QR Code tab */}
       {tab === 'qr' && (
         <div className="bg-white rounded-xl border border-gray-200 p-8 flex flex-col items-center gap-5">

@@ -30,6 +30,9 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminTenants from './pages/admin/AdminTenants'
 import AdminTenantDetail from './pages/admin/AdminTenantDetail'
 import AdminUsers from './pages/admin/AdminUsers'
+import GBPReviews from './pages/GBPReviews'
+import GBPPhotos from './pages/GBPPhotos'
+import GBPProfile from './pages/GBPProfile'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import TermsOfService from './pages/TermsOfService'
 import NotFound from './pages/NotFound'
@@ -69,6 +72,9 @@ export default function App() {
               <Route path="competitors" element={<CompetitorAnalytics />} />
               <Route path="locations" element={<Locations />} />
               <Route path="locations/:id" element={<LocationDetail />} />
+              <Route path="locations/:id/reviews" element={<GBPReviews />} />
+              <Route path="locations/:id/photos" element={<GBPPhotos />} />
+              <Route path="locations/:id/profile" element={<GBPProfile />} />
               <Route path="citations" element={<Citations />} />
               <Route path="qa" element={<QAManager />} />
               <Route path="media" element={<MediaManager />} />
