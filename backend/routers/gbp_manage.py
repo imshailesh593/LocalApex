@@ -5,6 +5,7 @@ All operations act on real GBP data via the authenticated user's OAuth token.
 import uuid
 from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func as sqlfunc
 from services.gbp import ALL_METRICS
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -789,3 +790,303 @@ async def update_lodging(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return result
+
+
+# ── Local SEO Audit ────────────────────────────────────────────────────────────
+
+def _score_item(value: bool, weight: int) -> int:
+    return weight if value else 0
+
+
+@router.get("/locations/{location_id}/seo-audit")
+async def seo_audit(location_id: str, db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)):
+    """
+    Comprehensive local SEO audit covering Relevance, Prominence, and Activity.
+    Returns score 0-100 + prioritised action list.
+    """
+    loc = await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+
+    checks = []
+
+    # ── 1. RELEVANCE — GBP profile completeness ───────────────────────────────
+    try:
+        profile = await gbp_svc.get_location_profile(token, loc.gbp_location_id)
+    except RuntimeError:
+        profile = {}
+
+    desc = profile.get("profile", {}).get("description", "") or ""
+    has_desc = len(desc) >= 150
+    desc_len = len(desc)
+    has_hours = bool(profile.get("regularHours", {}).get("periods"))
+    has_website = bool(profile.get("websiteUri"))
+    has_phone = bool(profile.get("phoneNumbers", {}).get("primaryPhone"))
+    has_category = bool(profile.get("categories", {}).get("primaryCategory"))
+    has_labels = bool(profile.get("labels"))
+    service_items = profile.get("serviceItems", [])
+    has_services = len(service_items) > 0
+    has_attributes = bool(profile.get("attributes"))
+
+    checks += [
+        {
+            "id": "description",
+            "category": "Relevance",
+            "title": "Business description",
+            "status": "pass" if has_desc else ("warn" if desc_len > 0 else "fail"),
+            "detail": f"{desc_len}/750 characters" if desc_len else "No description set",
+            "impact": "High",
+            "action": "Write a 200-750 char description using your main service keywords. Google uses this for search matching." if not has_desc else None,
+            "weight": 15,
+            "score": 15 if has_desc else (7 if desc_len > 0 else 0),
+        },
+        {
+            "id": "category",
+            "category": "Relevance",
+            "title": "Primary category set",
+            "status": "pass" if has_category else "fail",
+            "detail": profile.get("categories", {}).get("primaryCategory", {}).get("displayName", "Not set"),
+            "impact": "High",
+            "action": "Set your primary business category — it's the strongest relevance signal Google uses for local search." if not has_category else None,
+            "weight": 10,
+            "score": _score_item(has_category, 10),
+        },
+        {
+            "id": "services",
+            "category": "Relevance",
+            "title": "Service items listed",
+            "status": "pass" if has_services else "warn",
+            "detail": f"{len(service_items)} services listed" if has_services else "No services added",
+            "impact": "Medium",
+            "action": "Add your services/menu items to the GBP listing. Each service is indexed by Google and helps match relevant searches.",
+            "weight": 8,
+            "score": _score_item(has_services, 8),
+        },
+        {
+            "id": "hours",
+            "category": "Relevance",
+            "title": "Business hours set",
+            "status": "pass" if has_hours else "fail",
+            "detail": "Hours configured" if has_hours else "No hours set — listing shows as status unknown",
+            "impact": "High",
+            "action": "Set your business hours. Listings without hours rank lower and lose customer trust.",
+            "weight": 8,
+            "score": _score_item(has_hours, 8),
+        },
+        {
+            "id": "website",
+            "category": "Relevance",
+            "title": "Website linked",
+            "status": "pass" if has_website else "warn",
+            "detail": profile.get("websiteUri", "Not set"),
+            "impact": "Medium",
+            "action": "Add your website URL to the GBP listing. It signals legitimacy and helps Google cross-reference your business.",
+            "weight": 5,
+            "score": _score_item(has_website, 5),
+        },
+        {
+            "id": "phone",
+            "category": "Relevance",
+            "title": "Phone number listed",
+            "status": "pass" if has_phone else "fail",
+            "detail": profile.get("phoneNumbers", {}).get("primaryPhone", "Not set"),
+            "impact": "Medium",
+            "action": "Add your primary phone number. It's a NAP consistency signal used by Google.",
+            "weight": 4,
+            "score": _score_item(has_phone, 4),
+        },
+    ]
+
+    # ── 2. PROMINENCE — Reviews ───────────────────────────────────────────────
+    total_reviews_r = await db.execute(
+        select(sqlfunc.count(ReviewFunnel.id)).where(
+            ReviewFunnel.tenant_id == cu["tenant_id"],
+            ReviewFunnel.location_id == location_id,
+            ReviewFunnel.source == "google",
+        )
+    )
+    total_reviews = total_reviews_r.scalar_one() or 0
+
+    avg_rating_r = await db.execute(
+        select(sqlfunc.avg(ReviewFunnel.rating)).where(
+            ReviewFunnel.tenant_id == cu["tenant_id"],
+            ReviewFunnel.location_id == location_id,
+            ReviewFunnel.source == "google",
+        )
+    )
+    avg_rating = round(float(avg_rating_r.scalar_one() or 0), 1)
+
+    responded_r = await db.execute(
+        select(sqlfunc.count(ReviewFunnel.id)).where(
+            ReviewFunnel.tenant_id == cu["tenant_id"],
+            ReviewFunnel.location_id == location_id,
+            ReviewFunnel.source == "google",
+            ReviewFunnel.google_reply.isnot(None),
+        )
+    )
+    responded = responded_r.scalar_one() or 0
+    response_rate = round(responded / total_reviews * 100) if total_reviews else 0
+
+    pending_r = await db.execute(
+        select(sqlfunc.count(ReviewFunnel.id)).where(
+            ReviewFunnel.tenant_id == cu["tenant_id"],
+            ReviewFunnel.location_id == location_id,
+            ReviewFunnel.source == "google",
+            ReviewFunnel.google_reply.is_(None),
+        )
+    )
+    pending_reviews = pending_r.scalar_one() or 0
+
+    checks += [
+        {
+            "id": "review_count",
+            "category": "Prominence",
+            "title": "Google review count",
+            "status": "pass" if total_reviews >= 25 else ("warn" if total_reviews >= 10 else "fail"),
+            "detail": f"{total_reviews} reviews synced" if total_reviews else "No reviews synced — click Sync in Google Reviews",
+            "impact": "High",
+            "action": "Aim for 25+ reviews. Use Campaigns to send review requests to customers." if total_reviews < 25 else None,
+            "weight": 15,
+            "score": 15 if total_reviews >= 25 else (10 if total_reviews >= 10 else (5 if total_reviews >= 3 else 0)),
+        },
+        {
+            "id": "avg_rating",
+            "category": "Prominence",
+            "title": "Average star rating",
+            "status": "pass" if avg_rating >= 4.3 else ("warn" if avg_rating >= 4.0 else "fail"),
+            "detail": f"{'⭐' * int(avg_rating)} {avg_rating} / 5.0" if avg_rating else "No ratings yet",
+            "impact": "High",
+            "action": "Rating below 4.3 hurts click-through. Use the review funnel to route unhappy customers away from Google.",
+            "weight": 12,
+            "score": 12 if avg_rating >= 4.3 else (8 if avg_rating >= 4.0 else (4 if avg_rating >= 3.5 else 0)),
+        },
+        {
+            "id": "response_rate",
+            "category": "Prominence",
+            "title": "Review response rate",
+            "status": "pass" if response_rate >= 80 else ("warn" if response_rate >= 50 else "fail"),
+            "detail": f"{response_rate}% ({responded}/{total_reviews} responded)" if total_reviews else "No reviews to respond to yet",
+            "impact": "High",
+            "action": f"Reply to the {pending_reviews} unanswered reviews. Google rewards businesses that engage with customers." if pending_reviews > 0 else None,
+            "weight": 10,
+            "score": 10 if response_rate >= 80 else (6 if response_rate >= 50 else (3 if response_rate >= 20 else 0)),
+        },
+    ]
+
+    # ── 3. ACTIVITY — Photos, Posts, Q&A ────────────────────────────────────
+    try:
+        photos = await gbp_svc.list_media(token, loc.gbp_location_id)
+    except RuntimeError:
+        photos = []
+
+    photo_count = len(photos)
+    has_cover = any(p.get("locationAssociation", {}).get("category") == "COVER" for p in photos)
+    has_logo = any(p.get("locationAssociation", {}).get("category") in ("PROFILE", "LOGO") for p in photos)
+
+    try:
+        questions = await gbp_svc.list_questions(token, loc.gbp_location_id)
+    except RuntimeError:
+        questions = []
+
+    unanswered_questions = [
+        q for q in questions
+        if not any(
+            a.get("author", {}).get("type") == "MERCHANT"
+            for a in q.get("topAnswers", [])
+        )
+    ]
+
+    # Check place actions
+    try:
+        actions_resp = await gbp_svc.list_place_actions(token, loc.gbp_location_id)
+        has_cta = len(actions_resp) > 0
+    except RuntimeError:
+        has_cta = False
+
+    checks += [
+        {
+            "id": "photos",
+            "category": "Activity",
+            "title": "Photos on listing",
+            "status": "pass" if photo_count >= 10 else ("warn" if photo_count >= 3 else "fail"),
+            "detail": f"{photo_count} photos on Google listing" if photo_count else "No photos — customers can't see your business",
+            "impact": "High",
+            "action": "Upload at least 10 photos (exterior, interior, team, products). Listings with 10+ photos get 42% more direction requests.",
+            "weight": 8,
+            "score": 8 if photo_count >= 10 else (5 if photo_count >= 3 else (2 if photo_count >= 1 else 0)),
+        },
+        {
+            "id": "cover_photo",
+            "category": "Activity",
+            "title": "Cover & logo photos",
+            "status": "pass" if (has_cover and has_logo) else ("warn" if (has_cover or has_logo) else "fail"),
+            "detail": f"Cover: {'✓' if has_cover else '✗'}  Logo/Profile: {'✓' if has_logo else '✗'}",
+            "impact": "Medium",
+            "action": "Upload a cover photo and logo/profile photo. These are the first images customers see on your listing.",
+            "weight": 5,
+            "score": 5 if (has_cover and has_logo) else (3 if (has_cover or has_logo) else 0),
+        },
+        {
+            "id": "qa",
+            "category": "Activity",
+            "title": "Q&A answered",
+            "status": "pass" if len(unanswered_questions) == 0 else "warn",
+            "detail": f"{len(unanswered_questions)} unanswered question{'s' if len(unanswered_questions) != 1 else ''}" if unanswered_questions else (f"{len(questions)} questions, all answered" if questions else "No Q&A yet"),
+            "impact": "Medium",
+            "action": f"Answer the {len(unanswered_questions)} unanswered questions in your Q&A section. Unanswered questions reduce trust." if unanswered_questions else None,
+            "weight": 4,
+            "score": 4 if not unanswered_questions else 2,
+        },
+        {
+            "id": "cta_links",
+            "category": "Activity",
+            "title": "Booking / CTA links",
+            "status": "pass" if has_cta else "warn",
+            "detail": "CTA links configured" if has_cta else "No booking or ordering links added",
+            "impact": "Medium",
+            "action": "Add a Book Appointment, Reserve a Table, or Order Food link. These buttons increase conversions directly from Google.",
+            "weight": 4,
+            "score": _score_item(has_cta, 4),
+        },
+    ]
+
+    # ── Scoring ───────────────────────────────────────────────────────────────
+    max_score = sum(c["weight"] for c in checks)
+    total_score = sum(c["score"] for c in checks)
+    pct = round(total_score / max_score * 100) if max_score else 0
+
+    grade = "A" if pct >= 90 else "B" if pct >= 75 else "C" if pct >= 60 else "D" if pct >= 40 else "F"
+
+    by_category = {}
+    for c in checks:
+        cat = c["category"]
+        if cat not in by_category:
+            by_category[cat] = {"score": 0, "max": 0, "checks": []}
+        by_category[cat]["score"] += c["score"]
+        by_category[cat]["max"] += c["weight"]
+        by_category[cat]["checks"].append(c)
+
+    # Priority actions: fail first, then warn, sorted by weight desc
+    actions = sorted(
+        [c for c in checks if c.get("action") and c["status"] != "pass"],
+        key=lambda c: (0 if c["status"] == "fail" else 1, -c["weight"])
+    )
+
+    return {
+        "location": {"id": loc.id, "name": loc.store_name, "city": loc.city},
+        "score": pct,
+        "grade": grade,
+        "total_checks": len(checks),
+        "passed": sum(1 for c in checks if c["status"] == "pass"),
+        "failed": sum(1 for c in checks if c["status"] == "fail"),
+        "warnings": sum(1 for c in checks if c["status"] == "warn"),
+        "categories": {
+            k: {
+                "score": v["score"],
+                "max": v["max"],
+                "pct": round(v["score"] / v["max"] * 100) if v["max"] else 0,
+                "checks": v["checks"],
+            }
+            for k, v in by_category.items()
+        },
+        "priority_actions": actions[:8],
+    }

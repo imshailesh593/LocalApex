@@ -35,6 +35,7 @@ import GBPPhotos from './pages/GBPPhotos'
 import GBPProfile from './pages/GBPProfile'
 import GBPInsights from './pages/GBPInsights'
 import GBPSettings from './pages/GBPSettings'
+import GBPSEOAudit from './pages/GBPSEOAudit'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import TermsOfService from './pages/TermsOfService'
 import NotFound from './pages/NotFound'
@@ -79,6 +80,7 @@ export default function App() {
               <Route path="locations/:id/profile" element={<GBPProfile />} />
               <Route path="locations/:id/insights" element={<GBPInsights />} />
               <Route path="locations/:id/settings" element={<GBPSettings />} />
+              <Route path="locations/:id/seo" element={<GBPSEOAudit />} />
               <Route path="citations" element={<Citations />} />
               <Route path="qa" element={<QAManager />} />
               <Route path="media" element={<MediaManager />} />
