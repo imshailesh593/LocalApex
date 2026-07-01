@@ -3,8 +3,9 @@ Google Business Profile management endpoints.
 All operations act on real GBP data via the authenticated user's OAuth token.
 """
 import uuid
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from datetime import datetime, date, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Query
+from services.gbp import ALL_METRICS
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -417,3 +418,110 @@ async def update_profile(
     await db.commit()
 
     return result
+
+
+# ── Performance Insights ──────────────────────────────────────────────────────
+
+METRIC_LABELS = {
+    "BUSINESS_IMPRESSIONS_DESKTOP_MAPS":   "Desktop Map Views",
+    "BUSINESS_IMPRESSIONS_DESKTOP_SEARCH": "Desktop Search Views",
+    "BUSINESS_IMPRESSIONS_MOBILE_MAPS":    "Mobile Map Views",
+    "BUSINESS_IMPRESSIONS_MOBILE_SEARCH":  "Mobile Search Views",
+    "CALL_CLICKS":                          "Phone Calls",
+    "WEBSITE_CLICKS":                       "Website Clicks",
+    "BUSINESS_DIRECTION_REQUESTS":          "Direction Requests",
+    "BUSINESS_BOOKINGS":                    "Bookings",
+    "BUSINESS_FOOD_ORDERS":                 "Food Orders",
+}
+
+
+@router.get("/locations/{location_id}/insights")
+async def get_insights(
+    location_id: str,
+    days: int = Query(default=90, ge=7, le=540),
+    db: AsyncSession = Depends(get_db),
+    cu=Depends(get_current_user),
+):
+    """
+    Fetch real performance insights from Google Business Profile Performance API.
+    Returns daily timeseries + totals + week-over-week change for all metrics.
+    """
+    loc = await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+
+    end = date.today()
+    start = end - timedelta(days=days)
+
+    try:
+        raw = await gbp_svc.get_performance(
+            token,
+            loc.gbp_location_id,
+            (start.year, start.month, start.day),
+            (end.year, end.month, end.day),
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    # Parse the nested Google response into clean timeseries per metric
+    series_map: dict[str, dict[str, int]] = {}  # metric → {date_str: value}
+
+    for entry in raw.get("multiDailyMetricTimeSeries", []):
+        metric = entry.get("dailyMetric", "")
+        ts = entry.get("timeSeries", {}).get("datedValues", [])
+        daily: dict[str, int] = {}
+        for point in ts:
+            d = point.get("date", {})
+            date_str = f"{d.get('year')}-{str(d.get('month', 1)).zfill(2)}-{str(d.get('day', 1)).zfill(2)}"
+            daily[date_str] = int(point.get("value") or 0)
+        series_map[metric] = daily
+
+    # Build summary cards: total + vs previous period
+    mid = start + timedelta(days=days // 2)
+    summaries = []
+    for metric in ALL_METRICS:
+        daily = series_map.get(metric, {})
+        total = sum(daily.values())
+        current_half = sum(v for k, v in daily.items() if k >= str(mid))
+        prev_half = sum(v for k, v in daily.items() if k < str(mid))
+        change_pct = round(((current_half - prev_half) / prev_half * 100) if prev_half else 0)
+        summaries.append({
+            "metric": metric,
+            "label": METRIC_LABELS.get(metric, metric),
+            "total": total,
+            "change_pct": change_pct,
+            "daily": [{"date": k, "value": v} for k, v in sorted(daily.items())],
+        })
+
+    # Aggregate views
+    total_views = sum(
+        series_map.get(m, {}).values()
+        for m in [
+            "BUSINESS_IMPRESSIONS_DESKTOP_MAPS", "BUSINESS_IMPRESSIONS_MOBILE_MAPS",
+            "BUSINESS_IMPRESSIONS_DESKTOP_SEARCH", "BUSINESS_IMPRESSIONS_MOBILE_SEARCH",
+        ]
+    )
+    total_searches = sum(
+        series_map.get(m, {}).values()
+        for m in ["BUSINESS_IMPRESSIONS_DESKTOP_SEARCH", "BUSINESS_IMPRESSIONS_MOBILE_SEARCH"]
+    )
+    total_maps = sum(
+        series_map.get(m, {}).values()
+        for m in ["BUSINESS_IMPRESSIONS_DESKTOP_MAPS", "BUSINESS_IMPRESSIONS_MOBILE_MAPS"]
+    )
+
+    return {
+        "location_id": location_id,
+        "location_name": loc.store_name,
+        "period_days": days,
+        "start_date": str(start),
+        "end_date": str(end),
+        "summary": {
+            "total_views": total_views,
+            "total_searches": total_searches,
+            "total_map_views": total_maps,
+            "total_calls": sum(series_map.get("CALL_CLICKS", {}).values()),
+            "total_website_clicks": sum(series_map.get("WEBSITE_CLICKS", {}).values()),
+            "total_directions": sum(series_map.get("BUSINESS_DIRECTION_REQUESTS", {}).values()),
+        },
+        "metrics": summaries,
+    }

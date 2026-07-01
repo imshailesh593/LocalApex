@@ -244,6 +244,7 @@ export default function LocationDetail() {
       {tab === 'overview' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-0">
           {[
+            { to: `/locations/${id}/insights`, icon: '📊', title: 'Insights', desc: 'Views, searches, calls, clicks & directions' },
             { to: `/locations/${id}/reviews`, icon: '⭐', title: 'Google Reviews', desc: 'Sync, view & reply to real Google reviews' },
             { to: `/locations/${id}/photos`, icon: '🖼️', title: 'Photos', desc: 'Upload & manage photos on your GBP listing' },
             { to: `/locations/${id}/profile`, icon: '✏️', title: 'Profile & SEO', desc: 'Edit hours, description, categories & labels' },

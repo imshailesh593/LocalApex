@@ -9,7 +9,20 @@ from config import get_settings
 
 GBP_V4 = "https://mybusiness.googleapis.com/v4"
 GBP_INFO = "https://mybusinessbusinessinformation.googleapis.com/v1"
+GBP_PERF = "https://businessprofileperformance.googleapis.com/v1"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+ALL_METRICS = [
+    "BUSINESS_IMPRESSIONS_DESKTOP_MAPS",
+    "BUSINESS_IMPRESSIONS_DESKTOP_SEARCH",
+    "BUSINESS_IMPRESSIONS_MOBILE_MAPS",
+    "BUSINESS_IMPRESSIONS_MOBILE_SEARCH",
+    "CALL_CLICKS",
+    "WEBSITE_CLICKS",
+    "BUSINESS_DIRECTION_REQUESTS",
+    "BUSINESS_BOOKINGS",
+    "BUSINESS_FOOD_ORDERS",
+]
 
 
 async def get_access_token(refresh_token: str) -> str:
@@ -175,4 +188,43 @@ async def update_location_profile(token: str, location_name: str, update_data: d
         )
     if resp.status_code not in (200, 201):
         raise RuntimeError(f"GBP profile update failed [{resp.status_code}]: {resp.text}")
+    return resp.json()
+
+
+# ── Performance / Insights ────────────────────────────────────────────────────
+
+async def get_performance(
+    token: str,
+    location_name: str,
+    start_date: tuple[int, int, int],
+    end_date: tuple[int, int, int],
+    metrics: list[str] | None = None,
+) -> dict:
+    """
+    Fetch daily performance metrics from the Business Profile Performance API.
+    location_name: accounts/{accountId}/locations/{locationId}
+    start_date / end_date: (year, month, day) tuples
+    Returns raw API response with multiDailyMetricTimeSeries.
+    """
+    # Performance API uses just the location id portion
+    loc_id = location_name.split("locations/")[-1]
+    url = f"{GBP_PERF}/locations/{loc_id}:fetchMultiDailyMetricsTimeSeries"
+
+    selected = metrics or ALL_METRICS
+    params = [
+        ("dailyRange.startDate.year", start_date[0]),
+        ("dailyRange.startDate.month", start_date[1]),
+        ("dailyRange.startDate.day", start_date[2]),
+        ("dailyRange.endDate.year", end_date[0]),
+        ("dailyRange.endDate.month", end_date[1]),
+        ("dailyRange.endDate.day", end_date[2]),
+    ]
+    for m in selected:
+        params.append(("dailyMetrics", m))
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=_headers(token), params=params)
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"GBP performance fetch failed [{resp.status_code}]: {resp.text}")
     return resp.json()

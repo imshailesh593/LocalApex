@@ -33,6 +33,7 @@ import AdminUsers from './pages/admin/AdminUsers'
 import GBPReviews from './pages/GBPReviews'
 import GBPPhotos from './pages/GBPPhotos'
 import GBPProfile from './pages/GBPProfile'
+import GBPInsights from './pages/GBPInsights'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import TermsOfService from './pages/TermsOfService'
 import NotFound from './pages/NotFound'
@@ -75,6 +76,7 @@ export default function App() {
               <Route path="locations/:id/reviews" element={<GBPReviews />} />
               <Route path="locations/:id/photos" element={<GBPPhotos />} />
               <Route path="locations/:id/profile" element={<GBPProfile />} />
+              <Route path="locations/:id/insights" element={<GBPInsights />} />
               <Route path="citations" element={<Citations />} />
               <Route path="qa" element={<QAManager />} />
               <Route path="media" element={<MediaManager />} />
