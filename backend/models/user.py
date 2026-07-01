@@ -8,6 +8,7 @@ class UserRole(str, enum.Enum):
     owner = "owner"
     admin = "admin"
     viewer = "viewer"
+    superadmin = "superadmin"
 
 
 class User(TenantBase):

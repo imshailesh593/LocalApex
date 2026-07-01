@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from database import get_db
-from auth import get_current_user
+from services.auth import get_current_user
 from models.tenant import Tenant
 from models.zernio_account import ZernioAccount
 from models.gbp_post import GbpPost

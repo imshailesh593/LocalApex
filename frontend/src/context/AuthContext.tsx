@@ -17,29 +17,49 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+function decodeJwtRole(token: string): string | null {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.role ?? null
+  } catch {
+    return null
+  }
+}
+
+function hydrateUser(stored: AuthUser | null, token: string | null): AuthUser | null {
+  if (!stored || !token) return stored
+  const role = decodeJwtRole(token)
+  return role ? { ...stored, role } : stored
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'))
+  const [token] = useState<string | null>(localStorage.getItem('token'))
   const [user, setUser] = useState<AuthUser | null>(() => {
     const stored = localStorage.getItem('user')
-    return stored ? JSON.parse(stored) : null
+    const parsed = stored ? JSON.parse(stored) : null
+    const tok = localStorage.getItem('token')
+    return hydrateUser(parsed, tok)
   })
+  const [tokenState, setTokenState] = useState<string | null>(token)
 
   const login = useCallback((newToken: string, newUser: AuthUser) => {
+    const role = decodeJwtRole(newToken) ?? newUser.role
+    const hydrated = { ...newUser, role }
     localStorage.setItem('token', newToken)
-    localStorage.setItem('user', JSON.stringify(newUser))
-    setToken(newToken)
-    setUser(newUser)
+    localStorage.setItem('user', JSON.stringify(hydrated))
+    setTokenState(newToken)
+    setUser(hydrated)
   }, [])
 
   const logout = useCallback(() => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    setToken(null)
+    setTokenState(null)
     setUser(null)
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout }}>
+    <AuthContext.Provider value={{ user, token: tokenState, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

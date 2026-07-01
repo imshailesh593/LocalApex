@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
-from auth import get_current_user
+from services.auth import get_current_user
 from models.notification_pref import NotificationPref
 from pydantic import BaseModel
 import uuid

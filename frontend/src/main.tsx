@@ -10,10 +10,34 @@ const queryClient = new QueryClient({
   },
 })
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null }
+  static getDerivedStateFromError(e: Error) { return { error: e } }
+  render() {
+    if (this.state.error) {
+      const e = this.state.error as Error
+      return (
+        <div style={{ fontFamily: 'monospace', padding: 32, color: '#c00' }}>
+          <h2>Runtime Error</h2>
+          <pre style={{ background: '#fff5f5', padding: 16, borderRadius: 8, overflowX: 'auto', fontSize: 13 }}>
+            {e.message}{'\n\n'}{e.stack}
+          </pre>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 )

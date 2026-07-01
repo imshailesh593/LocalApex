@@ -30,6 +30,10 @@ export default function Login() {
   }
 
   const handleGoogleLogin = async () => {
+    if (!auth || !googleProvider) {
+      setError('Google sign-in is not configured yet.')
+      return
+    }
     setError('')
     setGoogleLoading(true)
     try {
