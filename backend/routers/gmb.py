@@ -47,8 +47,26 @@ async def gmb_connect(request: Request, cu=Depends(get_current_user)):
 
 
 @router.get("/callback")
-async def gmb_callback(code: str, state: str, request: Request, db: AsyncSession = Depends(get_db)):
+async def gmb_callback(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    code: str = None,
+    state: str = None,
+    error: str = None,
+    error_description: str = None,
+):
     settings = get_settings()
+
+    # Google returns error= if user denied or scope not added to consent screen
+    if error:
+        msg = error_description or error
+        return RedirectResponse(
+            f"{settings.frontend_url}/locations?gmb=error&reason={msg.replace(' ', '+')}"
+        )
+
+    if not code or not state:
+        return RedirectResponse(f"{settings.frontend_url}/locations?gmb=error&reason=Missing+code+or+state")
+
     redirect_uri = _oauth_redirect_uri(request)
 
     # Exchange code for tokens

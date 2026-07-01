@@ -1,9 +1,9 @@
 import { useLocations, useCreateLocation, useDeleteLocation } from '../hooks/useLocations'
 import DataTable, { Column } from '../components/ui/DataTable'
 import NAPEditor from '../components/NAPEditor'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import api from '../api/client'
 import { useToast } from '../context/ToastContext'
 import type { Location } from '../types/api'
@@ -18,6 +18,34 @@ export default function Locations() {
   const fileRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
   const toast = useToast()
+  const [searchParams] = useSearchParams()
+
+  useEffect(() => {
+    const gmb = searchParams.get('gmb')
+    const count = searchParams.get('count')
+    const reason = searchParams.get('reason')
+    if (gmb === 'imported') {
+      toast.success(`Imported ${count} location${count !== '1' ? 's' : ''} from Google Business Profile`)
+      qc.invalidateQueries({ queryKey: ['locations'] })
+    } else if (gmb === 'no_accounts') {
+      toast.error('No Google Business Profile accounts found on this Google account.')
+    } else if (gmb === 'error') {
+      toast.error(`Google connection failed: ${reason ?? 'unknown error'}. Check that the business.manage scope is added in Google Cloud → Data Access.`)
+    }
+  }, [])
+
+  const connectGmb = async () => {
+    try {
+      const res = await api.get('/gmb/connect')
+      const url = res.data.connect_url
+      if (!url) { toast.error('No OAuth URL returned from server'); return }
+      window.location.href = url
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail ?? e?.message ?? 'Unknown error'
+      toast.error(`GBP connect failed: ${detail}`)
+      console.error('GMB connect error:', e?.response?.data ?? e)
+    }
+  }
 
   const importCsv = useMutation({
     mutationFn: async (file: File) => {
@@ -97,6 +125,13 @@ export default function Locations() {
             className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
           >
             {importCsv.isPending ? 'Importing…' : 'Import CSV'}
+          </button>
+          <button
+            onClick={connectGmb}
+            className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="" />
+            Import from Google
           </button>
           <button
             onClick={() => setShowForm(!showForm)}
