@@ -10,7 +10,11 @@ interface TenantRow {
   plan_type: string
   status: string
   locations: number
+  gbp_connected: boolean
+  gbp_locations: number
   reviews: number
+  google_reviews: number
+  response_rate: number
   users: number
   created_at: string
   razorpay_subscription_id: string | null
@@ -93,7 +97,7 @@ export default function AdminTenants() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['Business', 'Plan', 'Status', 'Locations', 'Reviews', 'Users', 'Joined', 'Actions'].map(h => (
+                {['Business', 'Plan', 'Status', 'GBP', 'Locations', 'Reviews', 'Response %', 'Users', 'Joined', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>
                 ))}
               </tr>
@@ -124,8 +128,21 @@ export default function AdminTenants() {
                       {['trial', 'active', 'suspended'].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${t.gbp_connected ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                      {t.gbp_connected ? '✓ Connected' : '✗ Not connected'}
+                    </span>
+                    {t.gbp_connected && <p className="text-xs text-gray-400 mt-0.5">{t.gbp_locations} location{t.gbp_locations !== 1 ? 's' : ''}</p>}
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{t.locations}</td>
-                  <td className="px-4 py-3 text-gray-600">{t.reviews}</td>
+                  <td className="px-4 py-3 text-gray-600">
+                    <span>{t.google_reviews} <span className="text-gray-400 text-xs">Google</span></span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-sm font-medium ${t.response_rate >= 80 ? 'text-green-600' : t.response_rate >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
+                      {t.response_rate}%
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{t.users}</td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{new Date(t.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
@@ -137,6 +154,23 @@ export default function AdminTenants() {
                       >
                         Login as
                       </button>
+                      {t.gbp_connected && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Login as ${t.business_name} and open GBP manager?`)) {
+                              adminApi.impersonate(t.id).then(r => {
+                                const prev = localStorage.getItem('token')
+                                localStorage.setItem('impersonate_prev_token', prev ?? '')
+                                localStorage.setItem('token', r.data.token)
+                                window.location.href = '/locations'
+                              })
+                            }
+                          }}
+                          className="text-xs text-green-600 hover:underline"
+                        >
+                          Manage GBP
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

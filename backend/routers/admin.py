@@ -8,6 +8,7 @@ from models.user import User
 from models.review import ReviewFunnel
 from models.location import Location
 from pydantic import BaseModel
+from typing import Any
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -84,8 +85,30 @@ async def list_tenants(
         loc_count = (await db.execute(
             select(func.count(Location.id)).where(Location.tenant_id == t.id, Location.is_deleted == False)
         )).scalar_one()
+        gbp_loc_count = (await db.execute(
+            select(func.count(Location.id)).where(
+                Location.tenant_id == t.id,
+                Location.is_deleted == False,
+                Location.gbp_location_id.isnot(None),
+            )
+        )).scalar_one()
         rev_count = (await db.execute(
             select(func.count(ReviewFunnel.id)).where(ReviewFunnel.tenant_id == t.id, ReviewFunnel.is_deleted == False)
+        )).scalar_one()
+        google_rev_count = (await db.execute(
+            select(func.count(ReviewFunnel.id)).where(
+                ReviewFunnel.tenant_id == t.id,
+                ReviewFunnel.is_deleted == False,
+                ReviewFunnel.source == "google",
+            )
+        )).scalar_one()
+        replied_count = (await db.execute(
+            select(func.count(ReviewFunnel.id)).where(
+                ReviewFunnel.tenant_id == t.id,
+                ReviewFunnel.is_deleted == False,
+                ReviewFunnel.source == "google",
+                ReviewFunnel.google_reply.isnot(None),
+            )
         )).scalar_one()
         user_count = (await db.execute(
             select(func.count(User.id)).where(User.tenant_id == t.id)
@@ -96,7 +119,11 @@ async def list_tenants(
             "plan_type": t.plan_type,
             "status": t.status,
             "locations": loc_count,
+            "gbp_connected": gbp_loc_count > 0,
+            "gbp_locations": gbp_loc_count,
             "reviews": rev_count,
+            "google_reviews": google_rev_count,
+            "response_rate": round(replied_count / google_rev_count * 100) if google_rev_count else 0,
             "users": user_count,
             "created_at": t.created_at,
             "razorpay_subscription_id": t.razorpay_subscription_id,
@@ -119,12 +146,35 @@ async def get_tenant(tenant_id: str, db: AsyncSession = Depends(get_db), _=Depen
     locations = locations_r.scalars().all()
 
     reviews_r = await db.execute(
-        select(ReviewFunnel.rating, ReviewFunnel.sentiment, ReviewFunnel.status, ReviewFunnel.created_at)
+        select(ReviewFunnel.rating, ReviewFunnel.sentiment, ReviewFunnel.status,
+               ReviewFunnel.source, ReviewFunnel.google_reply, ReviewFunnel.created_at)
         .where(ReviewFunnel.tenant_id == tenant_id, ReviewFunnel.is_deleted == False)
         .order_by(ReviewFunnel.created_at.desc())
         .limit(10)
     )
     recent_reviews = [dict(r._mapping) for r in reviews_r.fetchall()]
+
+    # GBP summary
+    gbp_locs = [l for l in locations if l.gbp_location_id]
+    total_google_reviews = (await db.execute(
+        select(func.count(ReviewFunnel.id)).where(
+            ReviewFunnel.tenant_id == tenant_id, ReviewFunnel.source == "google"
+        )
+    )).scalar_one()
+    replied_google = (await db.execute(
+        select(func.count(ReviewFunnel.id)).where(
+            ReviewFunnel.tenant_id == tenant_id,
+            ReviewFunnel.source == "google",
+            ReviewFunnel.google_reply.isnot(None),
+        )
+    )).scalar_one()
+    avg_rating_r = await db.execute(
+        select(func.avg(ReviewFunnel.rating)).where(
+            ReviewFunnel.tenant_id == tenant_id,
+            ReviewFunnel.source == "google",
+        )
+    )
+    avg_rating = round(float(avg_rating_r.scalar_one() or 0), 1)
 
     return {
         "tenant": {
@@ -138,11 +188,30 @@ async def get_tenant(tenant_id: str, db: AsyncSession = Depends(get_db), _=Depen
             "brand_color": tenant.brand_color,
             "razorpay_subscription_id": tenant.razorpay_subscription_id,
             "zernio_profile_id": tenant.zernio_profile_id,
+            "gmb_connected": bool(tenant.gmb_refresh_token),
             "created_at": tenant.created_at,
         },
         "users": [{"id": u.id, "name": u.name, "email": u.email, "role": u.role, "created_at": u.created_at} for u in users],
-        "locations": [{"id": l.id, "store_name": l.store_name, "city": l.city, "funnel_slug": l.funnel_slug} for l in locations],
+        "locations": [
+            {
+                "id": l.id,
+                "store_name": l.store_name,
+                "city": l.city,
+                "funnel_slug": l.funnel_slug,
+                "gbp_connected": bool(l.gbp_location_id),
+                "gbp_location_id": l.gbp_location_id,
+            }
+            for l in locations
+        ],
         "recent_reviews": recent_reviews,
+        "gbp_summary": {
+            "connected": bool(tenant.gmb_refresh_token),
+            "linked_locations": len(gbp_locs),
+            "total_google_reviews": total_google_reviews,
+            "replied": replied_google,
+            "response_rate": round(replied_google / total_google_reviews * 100) if total_google_reviews else 0,
+            "avg_rating": avg_rating,
+        },
     }
 
 
