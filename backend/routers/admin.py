@@ -253,7 +253,14 @@ async def impersonate_tenant(tenant_id: str, db: AsyncSession = Depends(get_db),
         raise HTTPException(status_code=404, detail="No users in this tenant")
 
     token = create_access_token({"sub": user.id, "tenant_id": tenant_id, "role": user.role, "impersonated_by": cu["sub"]})
-    return {"token": token, "tenant": tenant.business_name, "user": user.email}
+    return {
+        "token": token,
+        "tenant": tenant.business_name,
+        "user": user.email,
+        "user_id": user.id,
+        "user_name": user.name,
+        "tenant_id": tenant_id,
+    }
 
 
 # ── Users ────────────────────────────────────────────────────────────────────
