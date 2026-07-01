@@ -7,10 +7,14 @@ is centralised.
 import httpx
 from config import get_settings
 
-GBP_V4 = "https://mybusiness.googleapis.com/v4"
-GBP_INFO = "https://mybusinessbusinessinformation.googleapis.com/v1"
-GBP_PERF = "https://businessprofileperformance.googleapis.com/v1"
-TOKEN_URL = "https://oauth2.googleapis.com/token"
+GBP_V4       = "https://mybusiness.googleapis.com/v4"
+GBP_INFO     = "https://mybusinessbusinessinformation.googleapis.com/v1"
+GBP_PERF     = "https://businessprofileperformance.googleapis.com/v1"
+GBP_NOTIF    = "https://mybusinessnotifications.googleapis.com/v1"
+GBP_ACTIONS  = "https://mybusinessplaceactions.googleapis.com/v1"
+GBP_VERIFY   = "https://mybusinessverifications.googleapis.com/v1"
+GBP_LODGING  = "https://mybusinesslodging.googleapis.com/v1"
+TOKEN_URL    = "https://oauth2.googleapis.com/token"
 
 ALL_METRICS = [
     "BUSINESS_IMPRESSIONS_DESKTOP_MAPS",
@@ -227,4 +231,167 @@ async def get_performance(
 
     if resp.status_code != 200:
         raise RuntimeError(f"GBP performance fetch failed [{resp.status_code}]: {resp.text}")
+    return resp.json()
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+async def get_notification_settings(token: str, account_name: str) -> dict:
+    """
+    account_name: accounts/{accountId}
+    Returns current notification settings (which events trigger alerts).
+    """
+    url = f"{GBP_NOTIF}/{account_name}/notificationSetting"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=_headers(token))
+    if resp.status_code != 200:
+        raise RuntimeError(f"Notification settings fetch failed [{resp.status_code}]: {resp.text}")
+    return resp.json()
+
+
+async def update_notification_settings(token: str, account_name: str, notification_types: list[str]) -> dict:
+    """
+    notification_types: list of types to enable, e.g.
+    ["NEW_REVIEW", "UPDATED_REVIEW", "NEW_CUSTOMER_MEDIA", "NEW_QUESTION", "UPDATED_QUESTION", "COMPETITOR_INSIGHTS"]
+    """
+    url = f"{GBP_NOTIF}/{account_name}/notificationSetting"
+    payload = {
+        "name": f"{account_name}/notificationSetting",
+        "notificationTypes": notification_types,
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.patch(
+            url,
+            headers=_headers(token),
+            params={"updateMask": "notificationTypes"},
+            json=payload,
+        )
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"Notification update failed [{resp.status_code}]: {resp.text}")
+    return resp.json()
+
+
+# ── Place Actions (CTAs / Booking Links) ─────────────────────────────────────
+
+async def list_place_actions(token: str, location_name: str) -> list[dict]:
+    """List all CTA links on this listing (booking, ordering, reservations, etc.)."""
+    url = f"{GBP_ACTIONS}/{location_name}/placeActionLinks"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=_headers(token), params={"pageSize": 100})
+    if resp.status_code != 200:
+        raise RuntimeError(f"Place actions fetch failed [{resp.status_code}]: {resp.text}")
+    return resp.json().get("placeActionLinks", [])
+
+
+async def create_place_action(token: str, location_name: str, action_type: str, uri: str) -> dict:
+    """
+    action_type options:
+      APPOINTMENT, ONLINE_APPOINTMENT, DINING_RESERVATION, FOOD_ORDERING,
+      FOOD_DELIVERY, FOOD_TAKEOUT, SHOP_ONLINE
+    """
+    url = f"{GBP_ACTIONS}/{location_name}/placeActionLinks"
+    payload = {"placeActionType": action_type, "uri": uri, "isPreferred": True}
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, headers=_headers(token), json=payload)
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"Place action create failed [{resp.status_code}]: {resp.text}")
+    return resp.json()
+
+
+async def delete_place_action(token: str, action_name: str) -> None:
+    """action_name: accounts/.../locations/.../placeActionLinks/{linkId}"""
+    url = f"{GBP_ACTIONS}/{action_name}"
+    async with httpx.AsyncClient() as client:
+        resp = await client.delete(url, headers=_headers(token))
+    if resp.status_code not in (200, 204):
+        raise RuntimeError(f"Place action delete failed [{resp.status_code}]: {resp.text}")
+
+
+async def list_place_action_types(token: str, location_name: str) -> list[dict]:
+    """Returns which action types are available for this listing category."""
+    url = f"{GBP_ACTIONS}/placeActionTypeMetadata"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=_headers(token), params={"languageCode": "en"})
+    if resp.status_code != 200:
+        raise RuntimeError(f"Place action types fetch failed [{resp.status_code}]: {resp.text}")
+    return resp.json().get("placeActionTypeMetadata", [])
+
+
+# ── Verifications ─────────────────────────────────────────────────────────────
+
+async def get_verification_state(token: str, location_name: str) -> dict:
+    """
+    Returns the verification state of a location.
+    location_name: accounts/{accountId}/locations/{locationId}
+    """
+    url = f"{GBP_VERIFY}/{location_name}/verifications"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=_headers(token))
+    if resp.status_code != 200:
+        raise RuntimeError(f"Verification state fetch failed [{resp.status_code}]: {resp.text}")
+    return resp.json()
+
+
+async def fetch_verification_options(token: str, location_name: str, language_code: str = "en") -> list[dict]:
+    """List available verification methods (ADDRESS/postcard, PHONE_CALL, SMS, EMAIL, VETTED_PARTNER)."""
+    url = f"{GBP_VERIFY}/{location_name}:fetchVerificationOptions"
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            url, headers=_headers(token), json={"languageCode": language_code}
+        )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Verification options fetch failed [{resp.status_code}]: {resp.text}")
+    return resp.json().get("options", [])
+
+
+async def request_verification(token: str, location_name: str, method: str, context: dict | None = None) -> dict:
+    """
+    Initiate verification. method: ADDRESS | PHONE_CALL | SMS | EMAIL
+    context: required for some methods, e.g. {"addressData": {"businessName": "..."}}
+    """
+    url = f"{GBP_VERIFY}/{location_name}:verify"
+    payload = {"method": method}
+    if context:
+        payload.update(context)
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, headers=_headers(token), json=payload)
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"Verification request failed [{resp.status_code}]: {resp.text}")
+    return resp.json()
+
+
+async def complete_verification(token: str, verification_name: str, pin: str) -> dict:
+    """Complete verification by submitting the PIN received via postcard/phone/SMS."""
+    url = f"{GBP_VERIFY}/{verification_name}:complete"
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, headers=_headers(token), json={"pin": pin})
+    if resp.status_code != 200:
+        raise RuntimeError(f"Verification complete failed [{resp.status_code}]: {resp.text}")
+    return resp.json()
+
+
+# ── Lodging (Hotels / Resorts) ────────────────────────────────────────────────
+
+async def get_lodging(token: str, location_name: str) -> dict:
+    """Get full lodging info: amenities, pools, rooms, policies, etc."""
+    url = f"{GBP_LODGING}/{location_name}/lodging"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=_headers(token))
+    if resp.status_code != 200:
+        raise RuntimeError(f"Lodging fetch failed [{resp.status_code}]: {resp.text}")
+    return resp.json()
+
+
+async def update_lodging(token: str, location_name: str, lodging_data: dict, update_mask: str) -> dict:
+    """Update lodging fields. update_mask: comma-separated field paths."""
+    url = f"{GBP_LODGING}/{location_name}/lodging"
+    async with httpx.AsyncClient() as client:
+        resp = await client.patch(
+            url,
+            headers=_headers(token),
+            params={"updateMask": update_mask},
+            json=lodging_data,
+        )
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"Lodging update failed [{resp.status_code}]: {resp.text}")
     return resp.json()

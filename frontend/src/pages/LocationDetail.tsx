@@ -248,6 +248,7 @@ export default function LocationDetail() {
             { to: `/locations/${id}/reviews`, icon: '⭐', title: 'Google Reviews', desc: 'Sync, view & reply to real Google reviews' },
             { to: `/locations/${id}/photos`, icon: '🖼️', title: 'Photos', desc: 'Upload & manage photos on your GBP listing' },
             { to: `/locations/${id}/profile`, icon: '✏️', title: 'Profile & SEO', desc: 'Edit hours, description, categories & labels' },
+            { to: `/locations/${id}/settings`, icon: '⚙️', title: 'GBP Settings', desc: 'Verification, booking links & notifications' },
           ].map(card => (
             <Link key={card.to} to={card.to}
               className="bg-white rounded-xl border border-gray-200 p-4 hover:border-brand-300 hover:shadow-sm transition-all flex items-start gap-3">

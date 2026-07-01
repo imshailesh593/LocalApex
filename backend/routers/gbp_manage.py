@@ -525,3 +525,267 @@ async def get_insights(
         },
         "metrics": summaries,
     }
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+NOTIFICATION_TYPE_LABELS = {
+    "NEW_REVIEW":           "New review posted",
+    "UPDATED_REVIEW":       "Review updated by customer",
+    "NEW_CUSTOMER_MEDIA":   "Customer uploaded a photo",
+    "NEW_QUESTION":         "New Q&A question asked",
+    "UPDATED_QUESTION":     "Q&A question updated",
+    "COMPETITOR_INSIGHTS":  "Competitor insights available",
+}
+
+ALL_NOTIFICATION_TYPES = list(NOTIFICATION_TYPE_LABELS.keys())
+
+
+async def _get_account_name(tenant_id: str, db: AsyncSession) -> str:
+    """Extract account name from the first location's gbp_location_id."""
+    r = await db.execute(
+        select(Location).where(
+            Location.tenant_id == tenant_id,
+            Location.gbp_location_id.isnot(None),
+        ).limit(1)
+    )
+    loc = r.scalar_one_or_none()
+    if not loc or not loc.gbp_location_id:
+        raise HTTPException(status_code=400, detail="No GBP-linked locations found.")
+    # Extract accounts/{id} from accounts/{id}/locations/{id}
+    parts = loc.gbp_location_id.split("/locations/")
+    return parts[0]
+
+
+@router.get("/notifications/settings")
+async def get_notification_settings(db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)):
+    """Get current Google notification settings for this account."""
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    account_name = await _get_account_name(cu["tenant_id"], db)
+    try:
+        settings = await gbp_svc.get_notification_settings(token, account_name)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    enabled = set(settings.get("notificationTypes", []))
+    return {
+        "account": account_name,
+        "notifications": [
+            {
+                "type": t,
+                "label": NOTIFICATION_TYPE_LABELS[t],
+                "enabled": t in enabled,
+            }
+            for t in ALL_NOTIFICATION_TYPES
+        ],
+    }
+
+
+class NotificationUpdate(BaseModel):
+    enabled_types: list[str]
+
+
+@router.patch("/notifications/settings")
+async def update_notification_settings(
+    body: NotificationUpdate,
+    db: AsyncSession = Depends(get_db),
+    cu=Depends(get_current_user),
+):
+    """Enable or disable specific Google notification types."""
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    account_name = await _get_account_name(cu["tenant_id"], db)
+    try:
+        result = await gbp_svc.update_notification_settings(token, account_name, body.enabled_types)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return result
+
+
+# ── Place Actions (CTA Booking Links) ─────────────────────────────────────────
+
+PLACE_ACTION_LABELS = {
+    "APPOINTMENT":          "Book Appointment",
+    "ONLINE_APPOINTMENT":   "Book Online Appointment",
+    "DINING_RESERVATION":   "Reserve a Table",
+    "FOOD_ORDERING":        "Order Food",
+    "FOOD_DELIVERY":        "Food Delivery",
+    "FOOD_TAKEOUT":         "Food Takeout",
+    "SHOP_ONLINE":          "Shop Online",
+}
+
+
+@router.get("/locations/{location_id}/actions")
+async def list_place_actions(location_id: str, db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)):
+    """List all CTA links (booking, ordering, reservations) on this GBP listing."""
+    loc = await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    try:
+        actions = await gbp_svc.list_place_actions(token, loc.gbp_location_id)
+        types = await gbp_svc.list_place_action_types(token, loc.gbp_location_id)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return {
+        "actions": [
+            {
+                "name": a.get("name"),
+                "type": a.get("placeActionType"),
+                "label": PLACE_ACTION_LABELS.get(a.get("placeActionType", ""), a.get("placeActionType")),
+                "uri": a.get("uri"),
+                "is_preferred": a.get("isPreferred", False),
+                "is_editable": a.get("isEditable", True),
+                "create_time": a.get("createTime"),
+            }
+            for a in actions
+        ],
+        "available_types": [
+            {
+                "type": t.get("placeActionType"),
+                "label": PLACE_ACTION_LABELS.get(t.get("placeActionType", ""), t.get("placeActionType")),
+            }
+            for t in types
+        ],
+    }
+
+
+class PlaceActionCreate(BaseModel):
+    action_type: str
+    uri: str
+
+
+@router.post("/locations/{location_id}/actions", status_code=201)
+async def create_place_action(
+    location_id: str, body: PlaceActionCreate,
+    db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)
+):
+    """Add a booking/ordering/reservation link to the GBP listing."""
+    loc = await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    if body.action_type not in PLACE_ACTION_LABELS:
+        raise HTTPException(status_code=400, detail=f"Unknown action type: {body.action_type}")
+    try:
+        result = await gbp_svc.create_place_action(token, loc.gbp_location_id, body.action_type, body.uri)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return result
+
+
+@router.delete("/locations/{location_id}/actions/{action_name:path}", status_code=204)
+async def delete_place_action(
+    location_id: str, action_name: str,
+    db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)
+):
+    await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    try:
+        await gbp_svc.delete_place_action(token, action_name)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+# ── Verifications ─────────────────────────────────────────────────────────────
+
+@router.get("/locations/{location_id}/verification")
+async def get_verification(location_id: str, db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)):
+    """Get the current verification state of this listing."""
+    loc = await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    try:
+        state = await gbp_svc.get_verification_state(token, loc.gbp_location_id)
+        options = await gbp_svc.fetch_verification_options(token, loc.gbp_location_id)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    verifications = state.get("verifications", [])
+    is_verified = any(v.get("state") == "COMPLETED" for v in verifications)
+
+    return {
+        "is_verified": is_verified,
+        "verifications": verifications,
+        "available_methods": [
+            {
+                "method": o.get("verificationMethod"),
+                "description": {
+                    "ADDRESS": "Receive a postcard at your business address (5-14 days)",
+                    "PHONE_CALL": "Receive an automated phone call with a PIN",
+                    "SMS": "Receive a text message with a PIN",
+                    "EMAIL": "Receive an email with a verification link",
+                    "VETTED_PARTNER": "Verified through a Google trusted partner",
+                }.get(o.get("verificationMethod", ""), ""),
+                "display_data": o.get("addressData") or o.get("emailData") or o.get("phoneData") or {},
+            }
+            for o in options
+        ],
+    }
+
+
+class VerificationRequest(BaseModel):
+    method: str
+    context: dict | None = None
+
+
+@router.post("/locations/{location_id}/verification/request")
+async def request_verification(
+    location_id: str, body: VerificationRequest,
+    db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)
+):
+    """Initiate verification (sends postcard/SMS/phone call/email)."""
+    loc = await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    try:
+        result = await gbp_svc.request_verification(token, loc.gbp_location_id, body.method, body.context)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return result
+
+
+class PinSubmit(BaseModel):
+    verification_name: str
+    pin: str
+
+
+@router.post("/locations/{location_id}/verification/complete")
+async def complete_verification(
+    location_id: str, body: PinSubmit,
+    db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)
+):
+    """Submit the PIN to complete verification."""
+    await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    try:
+        result = await gbp_svc.complete_verification(token, body.verification_name, body.pin)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return result
+
+
+# ── Lodging ───────────────────────────────────────────────────────────────────
+
+@router.get("/locations/{location_id}/lodging")
+async def get_lodging(location_id: str, db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)):
+    """Get lodging-specific data (for hotels/resorts: amenities, rooms, policies)."""
+    loc = await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    try:
+        data = await gbp_svc.get_lodging(token, loc.gbp_location_id)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return data
+
+
+@router.patch("/locations/{location_id}/lodging")
+async def update_lodging(
+    location_id: str, body: dict,
+    db: AsyncSession = Depends(get_db), cu=Depends(get_current_user)
+):
+    """Update lodging fields (amenities, room types, check-in policy, etc.)."""
+    loc = await _get_location(location_id, cu["tenant_id"], db)
+    token = await _get_tenant_token(cu["tenant_id"], db)
+    update_mask = ",".join(body.pop("_update_mask", "").split(","))
+    if not update_mask:
+        raise HTTPException(status_code=400, detail="Provide _update_mask field")
+    try:
+        result = await gbp_svc.update_lodging(token, loc.gbp_location_id, body, update_mask)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return result
