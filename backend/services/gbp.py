@@ -4,8 +4,34 @@ Handles token refresh and all GBP API calls using the OAuth refresh token
 stored per-tenant. All calls go through this module so token management
 is centralised.
 """
+import asyncio
 import httpx
 from config import get_settings
+
+# Simple in-process cache for slow-changing data (accounts, location lists)
+_cache: dict = {}
+
+async def _request(method: str, url: str, token: str, retries: int = 3, **kwargs) -> httpx.Response:
+    """Make a GBP API call with exponential backoff on 429/500 errors."""
+    delay = 2.0
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for attempt in range(retries):
+            resp = await getattr(client, method)(url, headers=_headers(token), **kwargs)
+            if resp.status_code == 429:
+                if attempt < retries - 1:
+                    await asyncio.sleep(delay)
+                    delay *= 2
+                    continue
+                raise RuntimeError(
+                    "Google API rate limit hit (429). Your project quota may be set to 0. "
+                    "Go to Google Cloud → APIs & Services → [API name] → Quotas → request an increase."
+                )
+            if resp.status_code >= 500 and attempt < retries - 1:
+                await asyncio.sleep(delay)
+                delay *= 2
+                continue
+            return resp
+    return resp  # type: ignore
 
 GBP_V4       = "https://mybusiness.googleapis.com/v4"
 GBP_INFO     = "https://mybusinessbusinessinformation.googleapis.com/v1"
@@ -58,19 +84,18 @@ async def list_reviews(token: str, location_name: str) -> list[dict]:
     url = f"{GBP_V4}/{location_name}/reviews"
     reviews = []
     page_token = None
-    async with httpx.AsyncClient() as client:
-        while True:
-            params = {"pageSize": 50}
-            if page_token:
-                params["pageToken"] = page_token
-            resp = await client.get(url, headers=_headers(token), params=params)
-            if resp.status_code != 200:
-                raise RuntimeError(f"GBP reviews fetch failed [{resp.status_code}]: {resp.text}")
-            data = resp.json()
-            reviews.extend(data.get("reviews", []))
-            page_token = data.get("nextPageToken")
-            if not page_token:
-                break
+    while True:
+        params = {"pageSize": 50}
+        if page_token:
+            params["pageToken"] = page_token
+        resp = await _request("get", url, token, params=params)
+        if resp.status_code != 200:
+            raise RuntimeError(f"GBP reviews fetch failed [{resp.status_code}]: {resp.text}")
+        data = resp.json()
+        reviews.extend(data.get("reviews", []))
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
     return reviews
 
 

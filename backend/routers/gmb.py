@@ -67,12 +67,26 @@ async def gmb_callback(code: str, state: str, request: Request, db: AsyncSession
     access_token = tokens["access_token"]
     refresh_token = tokens.get("refresh_token", "")
 
-    # Fetch GMB accounts
-    async with httpx.AsyncClient() as client:
-        accounts_resp = await client.get(
-            GMB_ACCOUNT_URL,
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
+    # Fetch GMB accounts (with retry on 429)
+    import asyncio
+    for attempt in range(3):
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            accounts_resp = await client.get(
+                GMB_ACCOUNT_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if accounts_resp.status_code == 429:
+            if attempt < 2:
+                await asyncio.sleep(2 ** attempt * 2)
+                continue
+            raise HTTPException(
+                status_code=429,
+                detail="Google API quota exceeded (0 req/min). Go to Google Cloud → "
+                       "APIs & Services → My Business Account Management API → Quotas "
+                       "→ request an increase for 'Requests per minute per project'."
+            )
+        break
+
     if accounts_resp.status_code != 200:
         raise HTTPException(status_code=502, detail=f"GMB accounts fetch failed: {accounts_resp.text}")
 
@@ -87,7 +101,7 @@ async def gmb_callback(code: str, state: str, request: Request, db: AsyncSession
         account_name = account.get("name")  # e.g. "accounts/123456"
         loc_url = GMB_LOCATIONS_URL.format(account=account_name)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             loc_resp = await client.get(
                 loc_url,
                 headers={"Authorization": f"Bearer {access_token}"},
